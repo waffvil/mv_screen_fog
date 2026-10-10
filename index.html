@@ -1263,7 +1263,9 @@ function drawFrame() {
   frameCanvas.width = W; frameCanvas.height = H;
   const g = fctx;
   if (sigilImgs) {   // the designed artwork, when present
-    g.save(); g.shadowColor = "rgba(8,4,12,0.8)"; g.shadowBlur = 8 * DPR; drawVoidFrame(g, "#f1efea"); g.restore();
+    // soft dark halo underneath, then the art again on top so the ink stays crisp white
+    g.save(); g.shadowColor = "rgba(8,4,12,0.7)"; g.shadowBlur = 8 * DPR; g.globalAlpha = 0.6; drawVoidFrame(g, "#ffffff"); g.restore();
+    drawVoidFrame(g, "#ffffff");
     return;
   }
   // dark halo so the ink reads over bright fog
