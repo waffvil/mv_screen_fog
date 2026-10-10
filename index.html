@@ -1204,9 +1204,68 @@ function distress(g) {
   g.restore();
 }
 
+// ---- "Sigil Frames v2 · 01 Void" layout, using the designed PNG pieces ----------
+// Pieces live in assets/iw/<name>.png (white ink). Coordinates are from the 600×800 design;
+// each piece is anchored to its nearest screen edges so the frame adapts to any aspect ratio.
+const SIGIL_SZ = { "a-full": [766, 952], "a-node": [215, 320], "a-node2": [130, 180], "a-needle": [54, 252], "a-arm": [486, 205], "a-corner": [280, 240], "b-full": [822, 1018], "b-star": [252, 585], "b-cross": [175, 200], "b-vine": [240, 400], "b-bar": [320, 160], "b-glyph": [55, 55], "b-moon": [135, 150], "b-tl": [260, 220] };
+const VOID_FRAME = { W: 600, H: 800, items: [
+  { t: "p", n: "a-full", x: -6, y: -6, w: 330 },
+  { t: "n", x1: 60, y1: 360, x2: 60, y2: 560, w: 5, pk: 0.4 },
+  { t: "p", n: "a-node", x: 12, y: 520, w: 95 },
+  { t: "p", n: "a-needle", x: 49, y: 650, w: 22 },
+  { t: "n", x1: 24, y1: 712, x2: 330, y2: 706, w: 4, pk: 0.15 }, { t: "d", x: 60, y: 709, s: 9, rot: 90 },
+  { t: "p", n: "b-full", x: 312, y: 441, w: 300, fx: -1 },
+  { t: "p", n: "a-corner", x: 498, y: -8, w: 110, fx: -1 },
+  { t: "n", x1: 578, y1: 70, x2: 578, y2: 470, w: 4, pk: 0.5 },
+  { t: "p", n: "a-node", x: 538, y: 230, w: 80, fx: -1 },
+  { t: "n", x1: 290, y1: 43, x2: 545, y2: 40, w: 3.5, pk: 0.2 },
+  { t: "p", n: "b-cross", x: 435, y: 19, w: 70, fy: -1 },
+  { t: "p", n: "b-glyph", x: 120, y: 560, w: 18 },
+  { t: "d", x: 205, y: 43, s: 6, rot: 0 }, { t: "d", x: 380, y: 42, s: 4, rot: 0 },
+] };
+let sigilImgs = null;
+function loadSigilAssets() {
+  const names = [...new Set(VOID_FRAME.items.filter((i) => i.t === "p").map((i) => i.n))];
+  Promise.all(names.map((n) => new Promise((res) => {
+    const im = new Image(); im.onload = () => res([n, im]); im.onerror = () => res(null); im.src = `assets/iw/${n}.png`;
+  }))).then((r) => {
+    if (r.every(Boolean)) { sigilImgs = Object.fromEntries(r); if (W) drawFrame(); }
+    else console.info("sigil art not found in assets/iw/ — using the drawn frame");
+  });
+}
+function drawVoidFrame(g, ink) {
+  const F = VOID_FRAME, k = Math.min(W / F.W, H / F.H);
+  const ax = (x) => (x < F.W / 2 ? x * k : W - (F.W - x) * k);
+  const ay = (y) => (y < F.H / 2 ? y * k : H - (F.H - y) * k);
+  for (const it of F.items) {
+    if (it.t === "p") {
+      const [sw, sh] = SIGIL_SZ[it.n], h = it.w * sh / sw;
+      g.save();
+      g.translate(ax(it.x + it.w / 2), ay(it.y + h / 2));
+      g.scale(it.fx || 1, it.fy || 1);
+      g.drawImage(sigilImgs[it.n], -it.w * k / 2, -h * k / 2, it.w * k, h * k);
+      g.restore();
+    } else if (it.t === "n") {
+      const x1 = ax(it.x1), y1 = ay(it.y1), x2 = ax(it.x2), y2 = ay(it.y2);
+      const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy), nx = -dy / L * it.w * k / 2, ny = dx / L * it.w * k / 2;
+      const mx = x1 + dx * it.pk, my = y1 + dy * it.pk;
+      g.fillStyle = ink; g.beginPath();
+      g.moveTo(x1, y1); g.lineTo(mx + nx, my + ny); g.lineTo(x2, y2); g.lineTo(mx - nx, my - ny); g.closePath(); g.fill();
+    } else {
+      const r = it.rot * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), a = it.s * k, b = it.s * 0.4 * k, x = ax(it.x), y = ay(it.y);
+      g.fillStyle = ink; g.beginPath();
+      g.moveTo(x + c * a, y + sn * a); g.lineTo(x - sn * b, y + c * b); g.lineTo(x - c * a, y - sn * a); g.lineTo(x + sn * b, y - c * b); g.closePath(); g.fill();
+    }
+  }
+}
+
 function drawFrame() {
   frameCanvas.width = W; frameCanvas.height = H;
   const g = fctx;
+  if (sigilImgs) {   // the designed artwork, when present
+    g.save(); g.shadowColor = "rgba(8,4,12,0.8)"; g.shadowBlur = 8 * DPR; drawVoidFrame(g, "#f1efea"); g.restore();
+    return;
+  }
   // dark halo so the ink reads over bright fog
   g.save(); g.shadowColor = "rgba(8,4,12,0.85)"; g.shadowBlur = 9 * DPR; g.fillStyle = "rgba(8,4,12,0.5)";
   drawGothicFrame(g); g.restore();
@@ -1355,6 +1414,7 @@ video.addEventListener("loadedmetadata", updateVideoRect);
 try { initGL(); } catch (e) { console.error(e); $("err").style.display = "grid"; $("err").querySelector("p").textContent = e.message; }
 resize();
 fogUp();
+loadSigilAssets();
 requestAnimationFrame(loop);
 </script>
 </body>
