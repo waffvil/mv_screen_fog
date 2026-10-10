@@ -1,0 +1,1297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Fogged Glass</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌫️</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --glass: rgba(255, 255, 255, 0.14);
+    --glass-border: rgba(255, 255, 255, 0.28);
+    --ink: #f4f7fa;
+    --muted: rgba(244, 247, 250, 0.72);
+    --accent: #9fd8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #11161b; color: var(--ink);
+    font-family: Inter, system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #stage, #overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; }
+  #stage { cursor: crosshair; }
+  #overlay { pointer-events: none; }
+  #frame { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; pointer-events: none; opacity: 0; transition: opacity 0.9s ease; }
+  body.theme-sigil #frame { opacity: 1; }
+  body.theme-sigil .pill { background: rgba(18, 10, 22, 0.38); border-color: rgba(255, 255, 255, 0.32); letter-spacing: 0.04em; }
+  body.theme-sigil #breathFill { background: linear-gradient(90deg, #fff, #f3b6d8); }
+  @media (min-width: 601px) {
+  body.theme-sigil #status { top: calc(6vmin + 14px); left: calc(9vmin + 14px); }
+  body.theme-sigil #toolbar { top: calc(6vmin + 14px); right: calc(9vmin + 14px); }
+  body.theme-sigil #settings { top: calc(6vmin + 58px); right: calc(9vmin + 14px); }
+  body.theme-sigil #hint { bottom: calc(9vmin + 14px); }
+  }
+  #status, #toolbar, #settings, #hint { transition: top 0.6s, left 0.6s, right 0.6s, bottom 0.6s, opacity 0.6s; }
+  video { display: none; }
+
+  /* --- start screen: sits on top of the live fog shader --- */
+  #intro {
+    position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
+    background: rgba(18, 26, 34, 0.18);
+    transition: opacity 0.9s ease;
+  }
+  #intro.hidden { opacity: 0; pointer-events: none; }
+  .intro-card { text-align: center; max-width: 520px; padding: 24px; text-shadow: 0 1px 12px rgba(20,30,40,0.35); }
+  .intro-card h1 { font-weight: 500; font-size: clamp(40px, 8vw, 68px); margin: 0 0 6px; letter-spacing: -1px; }
+  .intro-card p { margin: 6px 0; line-height: 1.5; color: var(--muted); }
+  .how { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; text-align: left; margin: 24px auto; max-width: 380px; font-size: 15px; }
+  .how b { font-weight: 600; color: var(--ink); }
+  #startBtn {
+    margin-top: 10px; font: 600 16px Inter, sans-serif; color: #1d2a34; cursor: pointer;
+    background: rgba(255,255,255,0.9); border: 0; border-radius: 999px; padding: 14px 34px;
+    box-shadow: 0 8px 30px rgba(10,20,30,0.25);
+  }
+  #startBtn:hover { background: #fff; }
+  #startBtn:disabled { opacity: 0.6; cursor: wait; }
+  #introNote { font-size: 13px; min-height: 1.4em; }
+
+  /* --- HUD --- */
+  .hud { position: fixed; z-index: 5; display: flex; gap: 8px; align-items: center; transition: opacity 0.4s; }
+  #toolbar { top: 14px; right: 14px; }
+  #status { top: 14px; left: 14px; }
+  #hint { bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 13px; color: var(--ink); text-align: center; transition: opacity 0.8s; max-width: calc(100vw - 32px); }
+  .pill {
+    background: var(--glass); border: 1px solid var(--glass-border);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border-radius: 999px; padding: 8px 14px; font-size: 13px; color: var(--ink);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.25);
+  }
+  button.pill { cursor: pointer; font-family: inherit; }
+  button.pill:hover { background: rgba(255,255,255,0.24); }
+  button.pill.on { background: rgba(159,216,255,0.32); border-color: rgba(159,216,255,0.6); }
+  #breathMeter { width: 60px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.22); overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
+  #breathFill { height: 100%; width: 0%; background: var(--accent); transition: width 0.08s; }
+  #modeDot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888; margin-right: 6px; vertical-align: middle; }
+  .hidden-ui .hud { opacity: 0; pointer-events: none; }
+
+  #settings { top: 58px; right: 14px; flex-direction: column; align-items: stretch; padding: 14px; border-radius: 16px; width: 250px; display: none; gap: 10px; }
+  #settings.open { display: flex; }
+  #settings label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  #settings input[type=range], #settings select { width: 100%; accent-color: var(--accent); }
+  #settings select { background: rgba(255,255,255,0.15); color: var(--ink); border: 1px solid var(--glass-border); border-radius: 8px; padding: 4px; font: inherit; }
+  #settings select option { color: #111; }
+  #settings .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+
+  #err { position: fixed; inset: 0; display: none; place-items: center; z-index: 20; background: #11161b; padding: 24px; text-align: center; }
+
+  @media (max-width: 600px) {
+    #toolbar { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); right: 16px; left: 16px; transform: none; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
+    #toolbar::-webkit-scrollbar { display: none; }
+    #toolbar .pill { flex: 0 0 auto; padding: 8px 12px; font-size: 12px; }
+    #status { top: calc(12px + env(safe-area-inset-top)); left: 16px; right: 16px; flex-wrap: wrap; }
+    #status .pill { font-size: 12px; }
+    #hint { bottom: calc(64px + env(safe-area-inset-bottom)); font-size: 12px; }
+    .intro-card { padding: 16px; }
+    .how { font-size: 14px; margin: 16px auto; }
+    #settings { top: auto; bottom: calc(64px + env(safe-area-inset-bottom)); right: 16px; max-height: 60vh; overflow-y: auto; }
+  }
+</style>
+</head>
+<body>
+<video id="video" playsinline muted></video>
+<canvas id="stage"></canvas>
+<canvas id="frame"></canvas>
+<canvas id="overlay"></canvas>
+
+<div id="status" class="hud">
+  <span class="pill"><span id="modeDot"></span><span id="modeText">loading…</span></span>
+  <span class="pill" id="micPill">breath<span id="breathMeter"><span id="breathFill"></span></span></span>
+</div>
+
+<div id="toolbar" class="hud">
+  <button class="pill" id="refogBtn" title="Fog the whole glass again (R)">Refog</button>
+  <button class="pill" id="skelBtn" title="Show tracking (H)">Tracking</button>
+  <button class="pill" id="calBtn" title="Relax your mouth, then click (C)">Calibrate</button>
+  <button class="pill" id="themeBtn" title="Sigil mode (T) — or hold an upside-down M">✧</button>
+  <button class="pill" id="snapBtn" title="Save a photo (S)">Save</button>
+  <button class="pill" id="setBtn" title="Settings">⚙</button>
+</div>
+
+<div id="settings" class="hud pill">
+  <label>Breath comes from
+    <select id="breathSrc">
+      <option value="mouth" selected>Mouth shape (O / open)</option>
+      <option value="both">Mouth shape + microphone</option>
+      <option value="mic">Microphone only</option>
+    </select>
+  </label>
+  <label>Breath sensitivity <input type="range" id="sens" min="0" max="1" step="0.01" value="0.5"></label>
+  <label>Finger size <input type="range" id="fingerSize" min="0.5" max="2" step="0.05" value="1"></label>
+  <label>Palm size <input type="range" id="palmSize" min="0.5" max="1.8" step="0.05" value="1"></label>
+  <label>Slow natural refog <input type="range" id="ambient" min="0" max="1" step="0.01" value="0"></label>
+  <label>Drips <input type="range" id="drips" min="0" max="1" step="0.01" value="0.5"></label>
+  <div class="row"><span>Hold <b>Space</b> = breathe</span><span><b>F</b> fullscreen</span></div>
+</div>
+
+<div id="hint" class="hud">☝️ one finger draws · ✋ open palm wipes · 😗 make an O to breathe the fog back · ✧ hold an upside-down M for sigil mode</div>
+
+<div id="intro">
+  <div class="intro-card">
+    <h1>fogged glass</h1>
+    <p>Your camera becomes a steamed‑up window.</p>
+    <div class="how">
+      <span>☝️</span><span><b>One finger</b> draws thin lines</span>
+      <span>✋</span><span><b>Open palm</b> wipes big streaky patches</span>
+      <span>😗</span><span><b>Make an O</b> to blow fog back on, right in front of your mouth</span>
+      <span>😮</span><span><b>Open your mouth</b> for a softer, wider "hhaah" breath</span>
+      <span>✧</span><span><b>Upside-down M</b> (3 fingers pointing down) — hold for sigil mode</span>
+    </div>
+    <button id="startBtn">Start</button>
+    <p id="introNote">Uses your camera. Nothing leaves your device.</p>
+  </div>
+</div>
+
+<div id="err"><div><h2>WebGL2 isn't available</h2><p>Try a recent Chrome, Edge, Firefox or Safari.</p></div></div>
+
+<script type="module">
+import { FilesetResolver, HandLandmarker, FaceLandmarker }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+// ---------- DOM ----------
+const $ = (id) => document.getElementById(id);
+const video = $("video"), stage = $("stage"), overlay = $("overlay"), octx = overlay.getContext("2d");
+const modeDot = $("modeDot"), modeText = $("modeText"), breathFill = $("breathFill");
+const ui = {
+  sens: $("sens"), fingerSize: $("fingerSize"), palmSize: $("palmSize"),
+  ambient: $("ambient"), drips: $("drips"), breathSrc: $("breathSrc"),
+};
+
+// =====================================================================
+//  Fog mask: a 2D canvas whose alpha is fog density (1 = fogged, 0 = wiped).
+//  Strokes and breath paint into it; the shader reads it every frame.
+// =====================================================================
+const mask = document.createElement("canvas");
+const mctx = mask.getContext("2d", { willReadFrequently: false });
+// Smear: faint streaks a palm/finger leaves on wiped glass (alpha = smear amount), same res as mask.
+const smear = document.createElement("canvas");
+const sctx = smear.getContext("2d");
+let MASK_SCALE = 0.5;   // mask px per device px (set in resize: half of CSS resolution)
+let W = 0, H = 0, DPR = 1;
+
+function resize() {
+  const coarse = matchMedia("(pointer: coarse)").matches;
+  DPR = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2);
+  W = Math.round(innerWidth * DPR); H = Math.round(innerHeight * DPR);
+  stage.width = overlay.width = W; stage.height = overlay.height = H;
+  MASK_SCALE = 0.5 / DPR;
+  const old = mask.width ? copyCanvas(mask) : null, oldSmear = smear.width ? copyCanvas(smear) : null;
+  smear.width = mask.width = Math.max(1, Math.round(W * MASK_SCALE));
+  smear.height = mask.height = Math.max(1, Math.round(H * MASK_SCALE));
+  if (old) mctx.drawImage(old, 0, 0, mask.width, mask.height); else fogUp();
+  if (oldSmear) sctx.drawImage(oldSmear, 0, 0, smear.width, smear.height);
+  gl && gl.viewport(0, 0, W, H);
+  updateVideoRect();
+}
+function copyCanvas(c) {
+  const n = document.createElement("canvas"); n.width = c.width; n.height = c.height;
+  n.getContext("2d").drawImage(c, 0, 0); return n;
+}
+
+function fogUp() {
+  mctx.save();
+  mctx.globalCompositeOperation = "source-over";
+  mctx.fillStyle = "#fff";
+  mctx.fillRect(0, 0, mask.width, mask.height);
+  mctx.restore();
+  sctx.clearRect(0, 0, smear.width, smear.height);
+  drips.length = 0;
+}
+
+// Palm brush: clean soft disc (edge streaks are drawn separately on the smear layer).
+const palmBrush = (() => {
+  const s = 256, c = document.createElement("canvas"); c.width = c.height = s;
+  const g = c.getContext("2d");
+  const rg = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  rg.addColorStop(0, "rgba(0,0,0,1)"); rg.addColorStop(0.6, "rgba(0,0,0,0.92)"); rg.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = rg; g.fillRect(0, 0, s, s);
+  return c;
+})();
+
+function wipeFinger(x, y, r, strength = 1) {
+  const mx = x * MASK_SCALE, my = y * MASK_SCALE, mr = Math.max(1.5, r * MASK_SCALE);
+  mctx.save();
+  mctx.globalCompositeOperation = "destination-out";
+  const g = mctx.createRadialGradient(mx, my, 0, mx, my, mr);
+  g.addColorStop(0, `rgba(0,0,0,${strength})`);
+  g.addColorStop(0.65, `rgba(0,0,0,${strength * 0.9})`);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  mctx.fillStyle = g;
+  mctx.fillRect(mx - mr, my - mr, mr * 2, mr * 2);
+  mctx.restore();
+}
+
+function wipePalm(x, y, r, angle, strength = 0.5) {
+  const mx = x * MASK_SCALE, my = y * MASK_SCALE, mr = r * MASK_SCALE;
+  mctx.save();
+  mctx.globalCompositeOperation = "destination-out";
+  mctx.globalAlpha = strength;
+  mctx.translate(mx, my); mctx.rotate(angle);
+  mctx.drawImage(palmBrush, -mr, -mr * 0.85, mr * 2, mr * 1.7);
+  mctx.restore();
+}
+
+// Breath: a cloudy blob, denser in the middle, made of jittered gradients.
+function addFog(x, y, r, amount) {
+  const mx = x * MASK_SCALE, my = y * MASK_SCALE, mr = r * MASK_SCALE;
+  mctx.save();
+  mctx.globalCompositeOperation = "source-over";
+  for (let i = 0; i < 5; i++) {
+    const ox = mx + (Math.random() - 0.5) * mr * 0.45, oy = my + (Math.random() - 0.5) * mr * 0.35;
+    const rr = mr * (0.55 + Math.random() * 0.5);
+    const g = mctx.createRadialGradient(ox, oy, 0, ox, oy, rr);
+    g.addColorStop(0, `rgba(255,255,255,${amount})`);
+    g.addColorStop(0.5, `rgba(255,255,255,${amount * 0.55})`);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    mctx.fillStyle = g;
+    mctx.fillRect(ox - rr, oy - rr, rr * 2, rr * 2);
+    sctx.globalCompositeOperation = "destination-out";
+    sctx.fillStyle = g;
+    sctx.fillRect(ox - rr, oy - rr, rr * 2, rr * 2);
+  }
+  sctx.globalCompositeOperation = "source-over";
+  mctx.restore();
+}
+
+// ---------- drips (rendered as little lenses in the shader) ----------
+const MAX_DRIPS = 40;
+const drips = [];
+const dripData = new Float32Array(MAX_DRIPS * 4);
+function maybeSpawnDrip(x, y, r, chance) {
+  if (drips.length >= MAX_DRIPS || Math.random() > chance * ui.drips.value * 2) return;
+  drips.push({
+    x: x + (Math.random() - 0.5) * r, y: y + r * 0.5,
+    size: (2.5 + Math.random() * 3) * DPR,
+    vy: 0, life: 1, pause: 20 + Math.random() * 60, wobble: Math.random() * 1000,
+  });
+}
+function updateDrips() {
+  for (let i = drips.length - 1; i >= 0; i--) {
+    const d = drips[i];
+    if (d.pause > 0) { d.pause--; continue; }
+    if (Math.random() < 0.015) d.pause = 10 + Math.random() * 50;   // stop-start like real water
+    d.vy = Math.min(d.vy + 0.06 * DPR, (0.9 + d.size * 0.12) * DPR);
+    d.y += d.vy;
+    d.x += Math.sin((d.y + d.wobble) * 0.02) * 0.2 * DPR;
+    d.life -= 0.0015; d.size *= 0.9995;
+    wipeFinger(d.x, d.y - d.size, d.size * 1.1, 0.85);
+    if (d.y > H + 20 || d.life <= 0 || d.size < 1.2) drips.splice(i, 1);
+  }
+  dripData.fill(0);
+  drips.forEach((d, i) => dripData.set([d.x, d.y, d.size, 0], i * 4));
+}
+
+// =====================================================================
+//  WebGL fog shader
+// =====================================================================
+const gl = stage.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false, alpha: false });
+if (!gl) $("err").style.display = "grid";
+
+const VS = `#version 300 es
+void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+
+const FS = `#version 300 es
+precision highp float;
+uniform sampler2D uVideo, uMask, uSmear;
+uniform vec2 uRes;          // device px
+uniform float uDpr, uHasVideo, uTime, uTheme, uGlitch;
+uniform vec4 uVRect;        // video cover rect, normalized screen units
+uniform vec4 uDrips[${MAX_DRIPS}];
+uniform int uDripN;
+out vec4 outColor;
+
+float hash1(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+vec2 hash2(vec2 p){ p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash1(i), hash1(i + vec2(1, 0)), f.x), mix(hash1(i + vec2(0, 1)), hash1(i + vec2(1, 1)), f.x), f.y);
+}
+float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += a * vnoise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+
+// Condensation droplets on a jittered grid.
+// xy = lens normal (-1..1), z = coverage, w = per-droplet random
+vec4 droplets(vec2 p, float cell, float sizePow){
+  p /= cell;
+  vec2 ip = floor(p), fp = fract(p);
+  vec4 res = vec4(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
+    vec2 g = vec2(i, j);
+    vec2 h = hash2(ip + g);
+    float rnd = hash1(ip + g + 7.31);
+    float r = 0.16 + 0.34 * pow(rnd, sizePow);
+    vec2 d = (fp - g - 0.2 - 0.6 * h) / r;
+    float l = dot(d, d);
+    if (l < 1.0){
+      float cov = smoothstep(1.0, 0.6, l);
+      if (cov > res.z) res = vec4(d, cov, rnd);
+    }
+  }
+  return res;
+}
+
+vec2 vidUV(vec2 s){ vec2 t = (s - uVRect.xy) / uVRect.zw; t.x = 1.0 - t.x; return clamp(t, 0.001, 0.999); }
+vec3 scene(vec2 s, float lod){
+  if (uHasVideo < 0.5) {
+    vec3 c = mix(vec3(0.20, 0.27, 0.33), vec3(0.06, 0.09, 0.12), s.y);
+    c += 0.12 * vec3(fbm(s * 4.0 + uTime * 0.02)) - 0.06;
+    c += 0.25 * exp(-12.0 * dot(s - vec2(0.72, 0.28), s - vec2(0.72, 0.28)));  // a "lamp" behind the glass
+    return c;
+  }
+  return textureLod(uVideo, vidUV(s), lod).rgb;
+}
+const vec2 PD[12] = vec2[12](
+  vec2(-0.326,-0.406), vec2(-0.840,-0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
+  vec2( 0.962,-0.195), vec2( 0.473,-0.480), vec2( 0.519, 0.767), vec2( 0.185,-0.893),
+  vec2( 0.507, 0.064), vec2( 0.896, 0.412), vec2(-0.322,-0.933), vec2(-0.792,-0.598));
+vec3 blurScene(vec2 s, float lod, float rad){
+  vec2 asp = vec2(uRes.y / uRes.x, 1.0);
+  float a = hash1(s * uRes) * 6.2831;            // rotate the disk per pixel => no banding
+  mat2 rot = mat2(cos(a), sin(a), -sin(a), cos(a));
+  vec3 c = vec3(0.0);
+  for (int i = 0; i < 12; i++) c += scene(s + rot * PD[i] * rad * asp, lod);
+  return c / 12.0;
+}
+float maskAt(vec2 s){ return texture(uMask, s).a; }
+
+void main(){
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);   // device px, y down
+  vec2 s = px / uRes;
+  if (uGlitch > 0.01) {   // band displacement on toggle
+    float band = floor(s.y * 28.0 + floor(uTime * 30.0) * 7.0);
+    float j = hash1(vec2(band, floor(uTime * 30.0)));
+    s.x += step(0.62, j) * (j - 0.8) * 0.12 * uGlitch;
+  }
+  vec2 cpx = px / uDpr;                                        // css px for texture scale
+  const vec3 L = normalize(vec3(-0.35, -0.6, 0.72));           // light from top-left
+
+  // fog density + its gradient (to find the wet edges of wipes)
+  float d = maskAt(s);
+  vec2 mt = 1.5 / vec2(textureSize(uMask, 0));
+  vec2 grad = vec2(maskAt(s + vec2(mt.x, 0.0)) - maskAt(s - vec2(mt.x, 0.0)),
+                   maskAt(s + vec2(0.0, mt.y)) - maskAt(s - vec2(0.0, mt.y)));
+  float edge = clamp(length(grad) * 1.8, 0.0, 1.0);
+
+  // real condensation is never even: thicker / thinner patches + denser near the frame
+  float n = fbm(cpx / 320.0 + 3.1);
+  float n2 = fbm(cpx / 90.0 - 7.7);
+  float vign = smoothstep(0.45, 1.0, length((s - 0.5) * vec2(1.0, 1.15)) * 1.3);
+  float thick = clamp(d * (0.80 + 0.28 * n + 0.08 * n2 + 0.18 * vign), 0.0, 1.0);
+
+  // two scales of droplets: microscopic haze, and visible beads that gather at wiped edges
+  vec4 fine = droplets(cpx, 2.4, 1.0);
+  vec4 bead = droplets(cpx + 31.7, 9.0, 2.5);
+  // beads only where water collects: along wipe edges and in thin, half-wiped film
+  float film = smoothstep(0.12, 0.4, d) * (1.0 - smoothstep(0.45, 0.8, d));
+  float beadChance = clamp(edge * 0.55 + film * 0.25, 0.0, 0.6);
+  float beadOn = step(bead.w, beadChance) * bead.z;
+
+  // ---- fogged look: heavy scatter blur, lifted & desaturated, lit by its own droplets
+  vec2 refr = fine.xy * fine.z * 0.0018 * thick;
+  float lod = mix(1.2, 5.4, thick);
+  vec3 blurred = blurScene(s + refr, lod, 0.006 + 0.03 * thick);
+  vec3 glow = blurScene(s, 6.8, 0.09);                           // light bleeding through the fog
+  float lum = dot(blurred, vec3(0.299, 0.587, 0.114));
+  vec3 fogged = mix(vec3(lum), blurred, 0.72);
+  // sigil mode tint lives only near the screen borders; the middle stays untouched
+  float edgeDist = min(min(s.x, 1.0 - s.x) * uRes.x / uRes.y, min(s.y, 1.0 - s.y));
+  float border = 1.0 - smoothstep(0.0, 0.16, edgeDist);
+  vec3 milk = mix(vec3(0.84, 0.875, 0.905), vec3(0.95, 0.85, 0.92), uTheme * border);
+  float lift = 0.33 + 0.07 * (n - 0.5) + 0.05 * vign;
+  fogged = fogged * (1.0 - lift) + milk * lift;
+  fogged += glow * glow * 0.32;
+  // micro-droplet sparkle and their tiny shadows
+  vec3 Nf = normalize(vec3(fine.xy * 0.9, 1.0));
+  fogged += pow(max(dot(Nf, L), 0.0), 30.0) * fine.z * 0.07 * (0.5 + lum);
+  fogged *= 1.0 - 0.015 * fine.z * smoothstep(0.5, 1.0, length(fine.xy));
+
+  // ---- wiped glass: sharp view, slightly wet, ridge of water refracts along the edge
+  vec3 clear = scene(s - grad * 0.012, 0.0);
+
+  float f = smoothstep(0.02, 0.95, thick);
+  vec3 col = mix(clear, fogged, f);
+  col += edge * 0.035 * (0.6 + n2);                              // bright wet rim
+
+  // ---- smear streaks on wiped glass: a faint milky, slightly soft film
+  float sm = min(texture(uSmear, s).a, 0.22) * (1.0 - f);
+  if (sm > 0.002) {
+    vec3 soft = scene(s, 2.2) * 0.82 + milk * 0.2;
+    col = mix(col, soft, sm);
+  }
+
+  // ---- beads: tiny lenses with an upside-down sharper view, specular dot, dark rim
+  if (beadOn > 0.01){
+    vec3 lens = mix(scene(s - bead.xy * 0.012, 1.0), col, 0.35) + 0.05;
+    float r = length(bead.xy);
+    lens += pow(max(dot(normalize(vec3(bead.xy, 0.55)), L), 0.0), 26.0) * 0.55;
+    lens *= 1.0 - 0.14 * smoothstep(0.7, 1.0, r);
+    col = mix(col, lens, beadOn * 0.75);
+  }
+
+  // ---- running drips
+  for (int i = 0; i < ${MAX_DRIPS}; i++){
+    if (i >= uDripN) break;
+    vec4 dr = uDrips[i];
+    vec2 q = (px - dr.xy) / (dr.z * vec2(1.0, 1.3));
+    float l = dot(q, q);
+    if (l < 1.0){
+      float cov = smoothstep(1.0, 0.7, l);
+      vec3 lens = scene(s - q * dr.z * 2.2 / uRes, 0.3) * 0.85 + 0.06;
+      lens += pow(max(dot(normalize(vec3(q, 0.5)), L), 0.0), 18.0) * 0.8;
+      lens *= 1.0 - 0.45 * smoothstep(0.55, 1.0, sqrt(l));
+      col = mix(col, lens, cov);
+    }
+  }
+
+  // faint glass sheen
+  col += 0.025 * smoothstep(0.9, 0.0, s.x + s.y * 0.6);
+  // sigil mode: cool lilac-pink grade, deeper shadows, fine film grain
+  float lumC = dot(col, vec3(0.299, 0.587, 0.114));
+  vec3 graded = mix(vec3(lumC), col, 0.75) * vec3(1.02, 0.95, 1.03) + vec3(0.03, 0.0, 0.035);
+  graded = mix(graded * vec3(0.86, 0.82, 0.92), graded, smoothstep(0.1, 0.6, lumC));
+  graded += (hash1(px + fract(uTime) * 91.7) - 0.5) * 0.035;
+  col = mix(col, graded, uTheme * border);
+  outColor = vec4(col, 1.0);
+}`;
+
+let prog, U = {}, videoTex, maskTex, smearTex;
+function initGL() {
+  if (!gl) return;
+  const sh = (type, src) => {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  for (const n of ["uVideo", "uMask", "uSmear", "uRes", "uDpr", "uHasVideo", "uTime", "uVRect", "uDrips", "uDripN", "uTheme", "uGlitch"])
+    U[n] = gl.getUniformLocation(prog, n);
+  gl.bindVertexArray(gl.createVertexArray());
+
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  const tex = (unit, mip) => {
+    const t = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([40, 50, 60, 255]));
+    return t;
+  };
+  videoTex = tex(0, true);
+  maskTex = tex(1, false);
+  smearTex = tex(2, false);
+  gl.uniform1i(U.uSmear, 2);
+  gl.uniform1i(U.uVideo, 0);
+  gl.uniform1i(U.uMask, 1);
+}
+
+function render(t) {
+  if (!gl) return;
+  const hasVideo = video.readyState >= 2 && video.videoWidth > 0;
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, videoTex);
+  if (hasVideo) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, maskTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, smearTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, smear);
+
+  gl.uniform2f(U.uRes, W, H);
+  gl.uniform1f(U.uDpr, DPR);
+  gl.uniform1f(U.uHasVideo, hasVideo ? 1 : 0);
+  gl.uniform1f(U.uTime, t / 1000);
+  gl.uniform4f(U.uVRect, vrect.x / W, vrect.y / H, vrect.w / W, vrect.h / H);
+  gl.uniform4fv(U.uDrips, dripData);
+  gl.uniform1i(U.uDripN, drips.length);
+  gl.uniform1f(U.uTheme, themeAmt);
+  gl.uniform1f(U.uGlitch, glitch);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+// ---------- video geometry ----------
+let vrect = { x: 0, y: 0, w: 1, h: 1 };
+function updateVideoRect() {
+  const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+  const s = Math.max(W / vw, H / vh);
+  vrect = { w: vw * s, h: vh * s, x: (W - vw * s) / 2, y: (H - vh * s) / 2 };
+}
+// normalized landmark -> mirrored screen pixel
+const toScreen = (p) => ({ x: vrect.x + (1 - p.x) * vrect.w, y: vrect.y + p.y * vrect.h });
+const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// =====================================================================
+//  Hands
+// =====================================================================
+let handLandmarker = null, faceLandmarker = null;
+let lastVideoTime = -1, frameNo = 0, trackFrames = 0;
+setInterval(() => { window.__trackFps = trackFrames; trackFrames = 0; }, 1000);
+let hands = [];
+let showSkeleton = false;
+
+// One Euro filter: kills jitter when the hand is still, stays snappy when it moves fast.
+class OneEuro {
+  constructor(minCutoff, beta, dCutoff = 1.0) { Object.assign(this, { minCutoff, beta, dCutoff, x: null, dx: 0, t: 0 }); }
+  static alpha(cutoff, dt) { const r = 2 * Math.PI * cutoff * dt; return r / (r + 1); }
+  filter(v, t) {
+    if (this.x === null) { this.x = v; this.t = t; return v; }
+    const dt = Math.max(1e-3, (t - this.t) / 1000); this.t = t;
+    const dv = (v - this.x) / dt;
+    this.dx += (dv - this.dx) * OneEuro.alpha(this.dCutoff, dt);
+    const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
+    this.x += (v - this.x) * OneEuro.alpha(cutoff, dt);
+    return this.x;
+  }
+  reset() { this.x = null; this.dx = 0; }
+}
+
+// Finger straightness from 3D world landmarks (metres, independent of camera angle):
+// tip-to-knuckle distance divided by the length of the finger's bones. ~1 = straight, <0.7 = curled.
+const FINGERS = { index: [5, 6, 7, 8], middle: [9, 10, 11, 12], ring: [13, 14, 15, 16], pinky: [17, 18, 19, 20] };
+const d3w = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+function straightness(w, [a, b, c, d]) {
+  return d3w(w[a], w[d]) / (d3w(w[a], w[b]) + d3w(w[b], w[c]) + d3w(w[c], w[d]));
+}
+
+function classify(h, world, lm) {
+  const pts = world || lm;   // world landmarks preferred; image landmarks as a fallback
+  h.ext = h.ext || {};
+  for (const f in FINGERS) {
+    const s = straightness(pts, FINGERS[f]);
+    // hysteresis per finger so a half-bent finger doesn't flicker
+    h.ext[f] = h.ext[f] ? s > 0.78 : s > 0.88;
+  }
+  const e = h.ext;
+  const n = e.index + e.middle + e.ring + e.pinky;
+  // "upside-down M": hand flipped (wrist clearly ABOVE the knuckles) with index + middle + ring
+  // pointing down. The pinky is ignored: with 3 fingers down it often reads as straight.
+  // Works with the palm facing either way.
+  const palmLen = Math.hypot(lm[9].x - lm[0].x, lm[9].y - lm[0].y);
+  const flipped = lm[9].y - lm[0].y > palmLen * 0.5;
+  const down = (tip, mcp) => lm[tip].y > lm[mcp].y + palmLen * 0.25;
+  if (flipped && e.index && e.middle && e.ring && down(8, 5) && down(12, 9) && down(16, 13)) return "theme";
+  if (n >= 3 && e.middle && e.ring) return "palm";
+  if (e.index && !e.middle && !e.ring && !e.pinky) return "finger";   // a clean point only
+  return "hover";
+}
+
+const MODE_SWITCH_MS = 90;     // a new gesture must hold this long before it takes over
+const SETTLE_MS = 150;
+const THEME_HOLD_MS = 700;     // hold the upside-down M this long to toggle sigil mode
+const CLIPPED_SWITCH_MS = 450; // hand partly off-screen: hold a new gesture much longer to switch         // after a gesture change, wait this long before touching the glass
+const STROKE_GAP_MS = 220;     // tracking dropouts shorter than this keep the line continuous
+
+function processHands(result, now) {
+  const lms = result.landmarks || [];
+  const worlds = result.worldLandmarks || [];
+  const claimed = new Set();
+  lms.forEach((lm, i) => {
+    // match to an existing hand by wrist proximity (handedness labels flip too often)
+    const wrist = toScreen(lm[0]);
+    let h = null, best = Infinity;
+    for (const c of hands) {
+      if (claimed.has(c) || !c.wrist) continue;
+      const dd = d2(c.wrist, wrist);
+      if (dd < best && dd < Math.min(W, H) * 0.35) { best = dd; h = c; }
+    }
+    if (!h) {
+      h = { mode: "hover", cand: null, candSince: 0, pos: null, last: null,
+            fx: new OneEuro(1.2, 0.015 / DPR), fy: new OneEuro(1.2, 0.015 / DPR) };
+      hands.push(h);
+    }
+    claimed.add(h);
+    h.wrist = wrist; h.lm = lm;
+
+    // Partly out of frame? The model then GUESSES the hidden fingers, so the gesture
+    // gets much harder to change and we only draw while the drawing point is visible.
+    const inFrame = (q, m = 0.02) => q.x > m && q.x < 1 - m && q.y > m && q.y < 1 - m;
+    let clipped = false;
+    for (let k = 5; k <= 20; k++) if (!inFrame(lm[k])) { clipped = true; break; }
+
+    // gesture with time-based debounce
+    const raw = classify(h, worlds[i], lm);
+    if (raw === h.mode) h.cand = null;
+    else if (raw !== h.cand) { h.cand = raw; h.candSince = now; }
+    else if (now - h.candSince >= (clipped ? CLIPPED_SWITCH_MS : MODE_SWITCH_MS)) {
+      h.mode = raw; h.cand = null; h.last = null; h.fx.reset(); h.fy.reset();
+      h.snapSize = true; h.armedAt = now + SETTLE_MS;
+      h.themeStart = now; h.themeFired = false;
+    }
+    // hold the theme gesture to toggle the cute mirror
+    if (h.mode === "theme") {
+      const c = toScreen({ x: (lm[0].x + lm[9].x) / 2, y: (lm[0].y + lm[9].y) / 2 });
+      h.themeAt = c;
+      h.themeProgress = Math.min(1, (now - h.themeStart) / THEME_HOLD_MS);
+      if (h.themeProgress >= 1 && !h.themeFired) { h.themeFired = true; toggleTheme(c); }
+    } else h.themeProgress = 0;
+
+    let p, size;
+    const span = d2(toScreen(lm[0]), toScreen(lm[9]));
+    if (h.mode === "palm") {
+      const ids = [0, 5, 9, 13, 17];
+      p = toScreen(ids.reduce((a, k) => ({ x: a.x + lm[k].x / 5, y: a.y + lm[k].y / 5 }), { x: 0, y: 0 }));
+      size = Math.min(span * 0.85, Math.min(W, H) * 0.28) * ui.palmSize.value;
+    } else {
+      p = toScreen(lm[8]);
+      size = Math.max(7 * DPR, span * 0.11) * ui.fingerSize.value;
+    }
+    // the point we draw with must itself be on camera
+    const keyPt = h.mode === "palm"
+      ? { x: (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5, y: (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5 }
+      : lm[8];
+    const keyVisible = inFrame(keyPt, 0.01);
+    // a sudden teleport (tracking glitch) breaks the line instead of slashing across the glass
+    if (h.rawP && d2(h.rawP, p) > Math.max(W, H) * 0.2 && now - h.seenAt < 150) {
+      h.fx.reset(); h.fy.reset(); h.last = null;
+    }
+    h.rawP = p;
+    h.pos = { x: h.fx.filter(p.x, now), y: h.fy.filter(p.y, now) };
+    // new gesture => jump straight to its brush size (no shrinking palm-sized circle)
+    h.size = h.size && !h.snapSize ? h.size + (size - h.size) * 0.25 : size;
+    h.snapSize = false;
+
+    // resume the same line after a short dropout instead of starting a new dot
+    if (h.last && now - h.seenAt > STROKE_GAP_MS) h.last = null;
+    h.seenAt = now;
+    const armed = now >= (h.armedAt || 0) && keyVisible;
+    if (armed && (h.mode === "finger" || h.mode === "palm")) strokeTo(h, h.pos.x, h.pos.y, h.size, h.mode);
+    else h.last = null;
+  });
+  hands = hands.filter((h) => now - h.seenAt < 400);
+  window.__hands = hands.map((h) => ({ mode: h.mode, ext: { ...h.ext } }));
+}
+
+// Draws a smooth curve through the tracked points (quadratic Bézier through midpoints),
+// so 30 fps hand tracking gives round curves instead of a chain of straight segments.
+function strokeTo(h, x, y, size, mode) {
+  const P = { x, y };
+  if (!h.last) { stamp(x, y, size, mode, 0); h.last = P; h.q = P; h.streaks = null; return; }
+  const M0 = h.last, Q = h.q || M0;
+  const M1 = { x: (Q.x + P.x) / 2, y: (Q.y + P.y) / 2 };
+  const approx = d2(M0, Q) + d2(Q, M1);
+  const step = Math.max(1, size * (mode === "palm" ? 0.18 : 0.3));
+  const n = Math.min(300, Math.max(1, Math.ceil(approx / step)));
+  const smearEvery = Math.max(1, Math.round(n / 8));
+  let prev = M0, smearFrom = M0;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    const pt = { x: u * u * M0.x + 2 * u * t * Q.x + t * t * M1.x, y: u * u * M0.y + 2 * u * t * Q.y + t * t * M1.y };
+    stamp(pt.x, pt.y, size, mode, Math.atan2(pt.y - prev.y, pt.x - prev.x));
+    if (i % smearEvery === 0 || i === n) {
+      if (d2(smearFrom, pt) > 0.5) smearStroke(h, smearFrom, pt, size, mode);
+      smearFrom = pt;
+    }
+    prev = pt;
+  }
+  h.last = M1; h.q = P;
+}
+
+// Faint parallel streaks following the wipe, like skin oil / uneven pressure on real glass.
+// The set of streaks is picked once per stroke so each line stays continuous.
+function smearStroke(h, a, b, size, mode) {
+  if (!h.streaks || h.streakMode !== mode) {
+    h.streakMode = mode;
+    // only a few faint streaks, hugging the OUTER EDGES of the wipe; the middle stays clean
+    const n = mode === "palm" ? 2 + Math.floor(Math.random() * 2) : 0;
+    h.streaks = Array.from({ length: n }, (_, i) => ({
+      off: (i % 2 ? 1 : -1) * (0.88 + Math.random() * 0.08),   // right at the border of the wipe
+      w: mode === "palm" ? 0.6 + Math.random() * 1.2 : 0.5 + Math.random() * 0.4,
+      a: mode === "palm" ? 0.02 + Math.random() * 0.03 : 0.012 + Math.random() * 0.012,
+    }));
+  }
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const px = -(b.y - a.y) / len, py = (b.x - a.x) / len;   // perpendicular to motion
+  const r = size * MASK_SCALE;
+  sctx.save();
+  sctx.lineCap = "round";
+  for (const st of h.streaks) {
+    const o = st.off * r;
+    // slight flicker in strength along the length => streaks look rubbed, not ruled
+    sctx.strokeStyle = `rgba(255,255,255,${st.a * (0.6 + Math.random() * 0.8)})`;
+    sctx.lineWidth = Math.max(0.5, st.w * (r / 30 + 0.4));
+    sctx.beginPath();
+    sctx.moveTo(a.x * MASK_SCALE + px * o, a.y * MASK_SCALE + py * o);
+    sctx.lineTo(b.x * MASK_SCALE + px * o, b.y * MASK_SCALE + py * o);
+    sctx.stroke();
+  }
+  sctx.restore();
+}
+
+function stamp(x, y, size, mode, angle) {
+  if (mode === "palm") { wipePalm(x, y, size, angle, 0.5); maybeSpawnDrip(x, y, size, 0.01); }
+  else { wipeFinger(x, y, size, 1); maybeSpawnDrip(x, y, size, 0.005); }
+}
+
+// =====================================================================
+//  Breath: mouth shape (face landmarker blendshapes) + optional mic
+// =====================================================================
+let face = null;          // { mouth:{x,y}, width, kind:'blow'|'hah'|null, raw, open, lm, oScore, openScore }
+let breath = 0, breathKind = null, breathHold = 0, keyBreath = false;
+
+// Mouth state is measured RELATIVE to your own resting mouth (auto-calibrated),
+// because blendshape scores alone vary a lot between faces, lighting and angles.
+const mouthState = {
+  base: null,           // resting values of every feature (calibrated on your relaxed face)
+  calib: null,          // { until, samples[] } while calibrating
+  sm: null,             // smoothed features
+  kind: null,           // committed state
+  outOfView: false,
+  candidate: null, candidateSince: 0, lostSince: 0,
+};
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
+function recalibrateMouth() { mouthState.base = null; mouthState.calib = null; mouthState.kind = null; }
+
+function readFace(res) {
+  const lm = res.faceLandmarks?.[0];
+  if (!lm) { face = null; return; }
+  const bs = {};
+  for (const c of res.faceBlendshapes?.[0]?.categories || []) bs[c.categoryName] = c.score;
+  const S = (i) => toScreen(lm[i]);
+  const fw = d2(S(234), S(454));
+  // 3D distances (landmark z is on the same scale as x) so turning/tilting your head
+  // doesn't masquerade as the mouth narrowing or opening
+  const ar = vrect.h / vrect.w;
+  const d3 = (i, j) => Math.hypot(lm[i].x - lm[j].x, (lm[i].y - lm[j].y) * ar, lm[i].z - lm[j].z);
+  const raw = {
+    w: d3(61, 291) / d3(234, 454),             // mouth width  (narrows for an O)
+    open: d3(13, 14) / d3(10, 152),            // inner-lip gap (grows when open)
+    funnel: bs.mouthFunnel || 0, pucker: bs.mouthPucker || 0, jaw: bs.jawOpen || 0,
+  };
+  const ms = mouthState;
+  if (!ms.sm) ms.sm = { ...raw };
+  for (const k in raw) ms.sm[k] += (raw[k] - ms.sm[k]) * 0.55;
+  const f = ms.sm;
+
+  const now = performance.now();
+  const mouthPt = toScreen({ x: (lm[13].x + lm[14].x) / 2, y: (lm[13].y + lm[14].y) / 2 });
+
+  // mouth at / past the edge of the camera frame => landmarks are guesses, don't trust them
+  const chin = lm[152], lip = lm[17];
+  ms.outOfView = lip.y > 0.97 || chin.y > 1.02 || lip.x < 0.02 || lip.x > 0.98;
+
+  // calibration: ~1.5 s of your relaxed face. Everything below is measured relative to it,
+  // because resting blendshapes differ a lot between people (some read 0.9 "pucker" at rest).
+  if (!ms.base && !ms.outOfView) {
+    if (!ms.calib) ms.calib = { until: now + 2000, samples: [] };
+    ms.calib.samples.push({ ...raw });
+    if (now > ms.calib.until && ms.calib.samples.length >= 10) {
+      const b = {};
+      for (const k in raw) b[k] = median(ms.calib.samples.map((s) => s[k]));
+      ms.base = b; ms.calib = null;
+    }
+  }
+  const b = ms.base;
+  let oScore = 0, openScore = 0, gap = 0;
+  if (b) {
+    // Only DRAMATIC changes from the calibrated resting mouth count. Measured geometry leads;
+    // blendshapes only confirm. "Pucker" is ignored entirely: it is noisy on full lips.
+    const rel = (v, base) => clamp01((v - base) / Math.max(0.15, 1 - base));
+    const dFun = rel(f.funnel, b.funnel), dJaw = rel(f.jaw, b.jaw);
+    const narrow = clamp01((b.w - f.w) / (b.w * 0.22));             // 22% narrower than rest = full O
+    gap = clamp01((f.open - b.open) / 0.11);                       // lips clearly apart vs rest
+    // O: the mouth visibly narrows; funnel only adds once it already has
+    oScore = clamp01(narrow + (narrow > 0.35 ? dFun * 0.4 : 0));
+    // open: the lips visibly part; jaw only adds once they have
+    openScore = clamp01(gap + (gap > 0.35 ? dJaw * 0.3 : 0));
+  }
+  if (ms.outOfView) { oScore = 0; openScore = 0; }
+
+  // classify: an O is narrow + rounded; a wide-open mouth is "hah" even if it rounds a bit
+  const on = 0.82 - ui.sens.value * 0.3;       // sensitivity lowers the trigger (0.67 at default)
+  const off = on * 0.55;                       // hysteresis: easier to stay than to start
+  let cand = null;
+  const isActive = (k) => ms.kind === k;
+  const thr = (k) => (isActive(k) ? off : on);
+  if (oScore > thr("blow") && !(openScore > 0.85 && narrow < 0.3)) cand = "blow";
+  else if (openScore > thr("hah")) cand = "hah";
+
+  if (cand === ms.kind) { ms.candidate = null; ms.lostSince = 0; }
+  else if (cand) {
+    // switching into a shape: must be held briefly so talking doesn't trigger it
+    if (ms.candidate !== cand) { ms.candidate = cand; ms.candidateSince = now; }
+    if (now - ms.candidateSince > (cand === "blow" ? 150 : 250)) { ms.kind = cand; ms.candidate = null; }
+  } else if (ms.kind) {
+    // leaving a shape: allow brief tracking dropouts
+    if (!ms.lostSince) ms.lostSince = now;
+    if (now - ms.lostSince > 160) { ms.kind = null; ms.lostSince = 0; }
+  }
+
+  const strength = ms.kind === "blow" ? 0.55 + 0.45 * oScore : ms.kind === "hah" ? 0.4 + 0.4 * openScore : 0;
+  const m = face?.mouth;
+  face = {
+    mouth: m ? { x: m.x + (mouthPt.x - m.x) * 0.5, y: m.y + (mouthPt.y - m.y) * 0.5 } : mouthPt,
+    width: fw, kind: ms.kind, raw: strength, open: gap > 0.08 || f.funnel > 0.12, lm, oScore, openScore,
+  };
+  window.__mouth = { ...f, base: b && { ...b }, oScore, openScore, kind: ms.kind, on, outOfView: ms.outOfView };
+}
+
+// mic: blowing = loud + noisy (spectrally flat) + low-frequency heavy
+let analyser = null, freqBuf = null, timeBuf = null, sampleRate = 48000, noiseFloor = -60, micStarting = false;
+async function startMic() {
+  if (analyser || micStarting) return;
+  micStarting = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    await ac.resume();
+    sampleRate = ac.sampleRate;
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.3;
+    ac.createMediaStreamSource(stream).connect(analyser);
+    freqBuf = new Float32Array(analyser.frequencyBinCount);
+    timeBuf = new Float32Array(analyser.fftSize);
+  } catch (err) { console.warn("mic unavailable", err); }
+  micStarting = false;
+}
+function micLevel() {
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(timeBuf);
+  let sum = 0;
+  for (let i = 0; i < timeBuf.length; i++) sum += timeBuf[i] * timeBuf[i];
+  const rmsDb = 10 * Math.log10(sum / timeBuf.length + 1e-12);
+  analyser.getFloatFrequencyData(freqBuf);
+  const hz = sampleRate / analyser.fftSize;
+  const lo = Math.max(1, Math.round(60 / hz)), hi = Math.round(4000 / hz);
+  let logSum = 0, linSum = 0, low = 0;
+  for (let i = lo; i <= hi; i++) {
+    const p = Math.pow(10, freqBuf[i] / 10) + 1e-14;
+    logSum += Math.log(p); linSum += p;
+    if (i * hz < 600) low += p;
+  }
+  const n = hi - lo + 1;
+  const flatness = Math.exp(logSum / n) / (linSum / n);
+  if (rmsDb < noiseFloor) noiseFloor = rmsDb; else noiseFloor += 0.02;
+  const margin = 26 - ui.sens.value * 20;
+  const noisy = flatness > 0.12 || low / linSum > 0.55;
+  return noisy ? Math.max(0, Math.min(1, (rmsDb - noiseFloor - margin) / 14)) : 0;
+}
+
+function updateBreath() {
+  const src = ui.breathSrc.value;
+  let level = 0, kind = null;
+  if (src !== "mic" && face?.kind) { level = face.raw; kind = face.kind; }
+  if (src !== "mouth") {
+    const mic = micLevel();
+    // with a face in view, only count the mic while the mouth is actually open
+    const allowed = src === "mic" || !face || face.open;
+    if (allowed && mic > level) { level = mic; kind = kind || "blow"; }
+  }
+  if (keyBreath && level < 0.85) { level = 0.85; kind = kind || "blow"; }
+
+  breath = level > breath ? breath + (level - breath) * 0.45 : breath * 0.88;
+  if (kind) breathKind = kind;
+  breathFill.style.width = (breath * 100).toFixed(0) + "%";
+
+  if (breath > 0.05) {
+    breathHold = Math.min(breathHold + breath * 0.02, 1);
+    const fw = face?.width || Math.min(W, H) * 0.3;
+    const cx = face?.mouth.x ?? W / 2, cy = face?.mouth.y ?? H * 0.6;
+    if (breathKind === "hah") {
+      // open-mouth breath: wide, soft, spreads outward
+      addFog(cx, cy + fw * 0.1, fw * (0.9 + breathHold * 1.6), 0.045 * breath);
+    } else {
+      // O-shaped blow: tight, dense, grows as you keep blowing
+      addFog(cx, cy, fw * (0.45 + breathHold * 1.1), 0.08 * breath);
+    }
+  } else {
+    breathHold = Math.max(0, breathHold - 0.015);
+  }
+  const amb = +ui.ambient.value;
+  if (amb > 0) { mctx.fillStyle = `rgba(255,255,255,${amb * 0.004})`; mctx.fillRect(0, 0, mask.width, mask.height); }
+}
+
+// =====================================================================
+//  Overlay: cursor rings, optional tracking skeleton
+// =====================================================================
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const LIPS = [61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185,61];
+function drawOverlay() {
+  octx.clearRect(0, 0, W, H);
+  for (const h of hands) {
+    if (h.mode !== "theme" || !h.themeAt || h.themeFired || performance.now() - h.seenAt > 120) continue;
+    const r = 34 * DPR;
+    octx.save();
+    octx.shadowColor = "rgba(255,150,210,0.9)"; octx.shadowBlur = 10 * DPR;
+    octx.lineWidth = 1 * DPR;
+    octx.strokeStyle = "rgba(255,255,255,0.3)";
+    octx.beginPath(); octx.arc(h.themeAt.x, h.themeAt.y, r, 0, Math.PI * 2); octx.stroke();
+    octx.lineWidth = 2 * DPR; octx.strokeStyle = "#fff";
+    octx.beginPath(); octx.arc(h.themeAt.x, h.themeAt.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * h.themeProgress); octx.stroke();
+    sparkle(octx, h.themeAt.x, h.themeAt.y, (14 + 10 * h.themeProgress) * DPR, h.themeProgress * Math.PI / 2, "#fff");
+    octx.restore();
+  }
+  drawSparkBurst();
+  const tNow = performance.now();
+  for (const h of hands) {
+    if (!h.pos || tNow - h.seenAt > 120) continue;
+    octx.save();
+    octx.lineWidth = 1.5 * DPR;
+    octx.strokeStyle = h.mode === "palm" ? "rgba(255,255,255,0.55)" : h.mode === "finger" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)";
+    octx.setLineDash(h.mode === "hover" ? [3 * DPR, 6 * DPR] : []);
+    octx.beginPath(); octx.arc(h.pos.x, h.pos.y, h.size || 12, 0, Math.PI * 2); octx.stroke();
+    octx.restore();
+    if (showSkeleton && h.lm) {
+      const pts = h.lm.map(toScreen);
+      octx.strokeStyle = "rgba(159,216,255,0.7)"; octx.lineWidth = 2 * DPR;
+      octx.beginPath();
+      for (const [a, b] of BONES) { octx.moveTo(pts[a].x, pts[a].y); octx.lineTo(pts[b].x, pts[b].y); }
+      octx.stroke();
+    }
+  }
+  if (showSkeleton && face) {
+    const pts = LIPS.map((i) => toScreen(face.lm[i]));
+    octx.strokeStyle = face.kind === "blow" ? "#ffb4c8" : face.kind === "hah" ? "#ffd296" : "rgba(255,255,255,0.6)";
+    octx.lineWidth = 2 * DPR;
+    octx.beginPath(); pts.forEach((p, i) => (i ? octx.lineTo(p.x, p.y) : octx.moveTo(p.x, p.y))); octx.stroke();
+    // live meters: how "O" and how "open" the mouth reads, with the trigger line
+    const on = window.__mouth?.on ?? 0.45;
+    const bx = Math.min(face.mouth.x + face.width * 0.45, W - 140 * DPR);
+    const by = Math.min(face.mouth.y - 22 * DPR, H - 90 * DPR);
+    const bw = 90 * DPR, bh = 8 * DPR;
+    octx.font = `${11 * DPR}px Inter, sans-serif`;
+    [["O", face.oScore, "#ffb4c8"], ["open", face.openScore, "#ffd296"]].forEach(([label, v, col], i) => {
+      const y = by + i * 20 * DPR;
+      octx.fillStyle = "rgba(0,0,0,0.35)"; octx.fillRect(bx, y, bw, bh);
+      octx.fillStyle = col; octx.fillRect(bx, y, bw * v, bh);
+      octx.fillStyle = "#fff"; octx.fillRect(bx + bw * on, y - 2 * DPR, 1.5 * DPR, bh + 4 * DPR);
+      octx.fillText(label, bx + bw + 6 * DPR, y + bh);
+    });
+  }
+}
+
+// =====================================================================
+//  Sigil mode: cybersigilism chrome linework frame, lilac-pink grade, sparkle flash
+// =====================================================================
+let themeOn = false, themeAmt = 0;
+const frameCanvas = $("frame"), fctx = frameCanvas.getContext("2d");
+let glitch = 0;   // brief glitch when sigil mode toggles
+const sparkParticles = [];
+
+function toggleTheme(at) {
+  themeOn = !themeOn;
+  glitch = 1;
+  document.body.classList.toggle("theme-sigil", themeOn);
+  if (themeOn) {
+    drawFrame();
+    const c = at || { x: W / 2, y: H / 2 };
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3, sp = (3 + Math.random() * 7) * DPR;
+      sparkParticles.push({ x: c.x, y: c.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        size: (6 + Math.random() * 16) * DPR, life: 1, rot: Math.random() * 0.8, spin: (Math.random() - 0.5) * 0.06 });
+    }
+    sparkParticles.push({ ring: true, x: c.x, y: c.y, r: 10 * DPR, life: 1 });
+  }
+}
+
+function drawSparkBurst() {
+  for (let i = sparkParticles.length - 1; i >= 0; i--) {
+    const p = sparkParticles[i];
+    p.life -= p.ring ? 0.03 : 0.014;
+    if (p.life <= 0) { sparkParticles.splice(i, 1); continue; }
+    octx.save();
+    octx.globalAlpha = Math.min(1, p.life * 1.4);
+    octx.shadowColor = "rgba(255,160,215,0.9)"; octx.shadowBlur = 12 * DPR;
+    if (p.ring) {
+      p.r += 14 * DPR;
+      octx.strokeStyle = "rgba(255,255,255,0.8)"; octx.lineWidth = 1.2 * DPR;
+      octx.beginPath(); octx.arc(p.x, p.y, p.r, 0, Math.PI * 2); octx.stroke();
+    } else {
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.94; p.vy *= 0.94; p.rot += p.spin;
+      sparkle(octx, p.x, p.y, p.size * (0.6 + p.life * 0.4), p.rot, "#ffffff");
+    }
+    octx.restore();
+  }
+}
+
+// 4-point star, long thin rays
+function sparkle(g, x, y, s, rot = 0, fill = "#fff") {
+  g.save(); g.translate(x, y); g.rotate(rot);
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2, r = i % 2 ? s * 0.09 : s * (i % 4 ? 0.55 : 1);
+    g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.closePath(); g.fillStyle = fill; g.fill();
+  g.restore();
+}
+
+// Tapered blade along a quadratic curve: thick at the root, needle-sharp at the tip.
+function blade(g, x0, y0, cx, cy, x1, y1, w, taper = 1.4, rootTaper = false) {
+  const N = 28, L = [], R = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, u = 1 - t;
+    const x = u * u * x0 + 2 * u * t * cx + t * t * x1, y = u * u * y0 + 2 * u * t * cy + t * t * y1;
+    const dx = 2 * u * (cx - x0) + 2 * t * (x1 - cx), dy = 2 * u * (cy - y0) + 2 * t * (y1 - cy);
+    const len = Math.hypot(dx, dy) || 1;
+    let ww = w * Math.pow(1 - t, taper);
+    if (rootTaper) ww *= Math.min(1, t * 4);
+    L.push([x - (dy / len) * ww, y + (dx / len) * ww]);
+    R.push([x + (dy / len) * ww, y - (dx / len) * ww]);
+  }
+  g.beginPath();
+  L.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  for (let i = R.length - 1; i >= 0; i--) g.lineTo(R[i][0], R[i][1]);
+  g.closePath(); g.fill();
+}
+
+// Corner sigil in unit space (0..1 ~ ornament size), symmetric about the diagonal.
+function cornerSigil(g, s) {
+  const B = (a, b, c, d, e, f, w, tp, rt) => {
+    blade(g, a * s, b * s, c * s, d * s, e * s, f * s, w * s, tp, rt);
+    blade(g, b * s, a * s, d * s, c * s, f * s, e * s, w * s, tp, rt);      // diagonal mirror
+  };
+  B(0.04, 0.05, 0.55, -0.03, 1.45, 0.07, 0.026, 1.6);       // long sweep along the edge
+  B(0.06, 0.07, 0.5, 0.12, 0.42, 0.38, 0.02, 1.3);          // inward hook
+  B(0.42, 0.38, 0.3, 0.5, 0.18, 0.44, 0.008, 1.0, true);    // hook curls back
+  B(0.36, 0.03, 0.44, 0.08, 0.52, 0.2, 0.012, 1.2, true);   // thorns
+  B(0.72, 0.04, 0.8, 0.07, 0.9, 0.16, 0.009, 1.2, true);
+  B(1.0, 0.055, 1.05, 0.0, 1.12, -0.03, 0.007, 1.0, true);
+  B(0.2, 0.06, 0.28, 0.2, 0.22, 0.3, 0.008, 1.2, true);
+  // central diagonal needle
+  blade(g, 0.05 * s, 0.05 * s, 0.32 * s, 0.32 * s, 0.68 * s, 0.68 * s, 0.014 * s, 1.1);
+  sparkle(g, 0.62 * s, 0.62 * s, 0.09 * s, Math.PI / 4, g.fillStyle);
+  sparkle(g, 0.26 * s, 0.26 * s, 0.05 * s, 0, g.fillStyle);
+}
+
+// Top/bottom centre sigil: pointed heart pierced by a dagger, with thorned wings. Mirrored L/R.
+function centerSigil(g, t) {
+  // dagger
+  blade(g, 0, 0.0, 0, 0.5 * t, 0, 1.25 * t, 0.028 * t, 1.2, true);
+  blade(g, -0.16 * t, 0.2 * t, 0, 0.2 * t, 0.16 * t, 0.2 * t, 0.012 * t, 0.2, true);    // crossguard
+  // pointed heart outline, made of two curved blades meeting at a sharp tip
+  for (const d of [-1, 1]) {
+    g.save(); g.scale(d, 1);
+    blade(g, 0.0, 0.42 * t, 0.02 * t, 0.2 * t, 0.2 * t, 0.26 * t, 0.012 * t, 0.3, true);
+    blade(g, 0.2 * t, 0.26 * t, 0.36 * t, 0.36 * t, 0.0, 0.78 * t, 0.016 * t, 1.1, true);
+    // wings
+    blade(g, 0.2 * t, 0.3 * t, 0.75 * t, 0.0, 1.7 * t, 0.12 * t, 0.045 * t, 1.6);
+    blade(g, 0.24 * t, 0.42 * t, 0.8 * t, 0.62 * t, 1.25 * t, 0.36 * t, 0.032 * t, 1.5);
+    blade(g, 0.8 * t, 0.08 * t, 0.95 * t, 0.2 * t, 1.0 * t, 0.36 * t, 0.012 * t, 1.1, true);
+    blade(g, 1.2 * t, 0.1 * t, 1.3 * t, -0.02 * t, 1.42 * t, -0.06 * t, 0.01 * t, 1.1, true);
+    blade(g, 0.62 * t, 0.56 * t, 0.66 * t, 0.72 * t, 0.58 * t, 0.86 * t, 0.01 * t, 1.1, true);
+    sparkle(g, 1.85 * t, 0.12 * t, 0.12 * t, 0, g.fillStyle);
+    g.restore();
+  }
+}
+
+// The frame: chrome linework only (no solid band), drawn once per resize.
+function drawFrame() {
+  frameCanvas.width = W; frameCanvas.height = H;
+  const g = fctx;
+  const m = Math.min(W, H) * 0.028;             // inset from the screen edge
+  const s = Math.min(W, H) * 0.24;              // corner sigil size
+  const t = Math.min(W, H) * 0.15;              // centre sigil size
+
+  // soft vignette so the linework has something to sit on
+  const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+  vg.addColorStop(0, "rgba(30,12,30,0)"); vg.addColorStop(0.7, "rgba(30,12,30,0)"); vg.addColorStop(1, "rgba(30,12,30,0.32)");
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+
+  const drawAll = () => {
+    // hairline border with small barbs
+    g.save();
+    g.lineWidth = Math.max(1, DPR * 0.8);
+    g.strokeStyle = g.fillStyle;
+    g.globalAlpha *= 0.55;
+    g.strokeRect(m * 1.15, m * 1.15, W - m * 2.3, H - m * 2.3);
+    g.restore();
+    const corner = (sx, sy) => { g.save(); g.translate(sx < 0 ? W - m : m, sy < 0 ? H - m : m); g.scale(sx, sy); cornerSigil(g, s); g.restore(); };
+    corner(1, 1); corner(-1, 1); corner(1, -1); corner(-1, -1);
+    g.save(); g.translate(W / 2, m * 0.6); centerSigil(g, t); g.restore();
+    g.save(); g.translate(W / 2, H - m * 0.6); g.scale(0.7, -0.7); centerSigil(g, t); g.restore();
+    // side accents
+    for (const sx of [1, -1]) {
+      g.save(); g.translate(sx > 0 ? m * 1.15 : W - m * 1.15, H / 2); g.scale(sx, 1);
+      blade(g, 0, -0.5 * t, 0.25 * t, 0, 0, 0.5 * t, 0.02 * t, 0.3, true);
+      blade(g, 0.05 * t, 0, 0.3 * t, -0.05 * t, 0.55 * t, 0, 0.018 * t, 1.4);
+      sparkle(g, 0.62 * t, 0, 0.08 * t, 0, g.fillStyle);
+      g.restore();
+    }
+  };
+
+  // pass 0: dark underlay (keeps the chrome readable over bright areas)
+  g.save();
+  g.shadowColor = "rgba(20,8,28,0.6)"; g.shadowBlur = 6 * DPR;
+  g.fillStyle = "rgba(30,14,38,0.35)";
+  drawAll();
+  g.restore();
+  // pass 1: pink glow
+  g.save();
+  g.shadowColor = "rgba(255,140,205,0.85)"; g.shadowBlur = 14 * DPR;
+  g.fillStyle = "rgba(255,190,225,0.55)";
+  drawAll();
+  g.restore();
+  // pass 2: chrome
+  g.save();
+  g.shadowColor = "rgba(14,6,22,0.85)"; g.shadowBlur = 3 * DPR; g.shadowOffsetY = 1 * DPR;
+  g.fillStyle = "#ffffff";   // solid white linework
+  drawAll();
+  g.restore();
+}
+
+// ---------- pointer (mouse / touch) ----------
+const pointers = new Map();
+stage.addEventListener("pointerdown", (e) => {
+  stage.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { last: null });
+  pointerMove(e);
+});
+stage.addEventListener("pointermove", pointerMove);
+const endPointer = (e) => pointers.delete(e.pointerId);
+stage.addEventListener("pointerup", endPointer);
+stage.addEventListener("pointercancel", endPointer);
+function pointerMove(e) {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const big = e.shiftKey || (e.pointerType === "touch" && (e.width || 0) > 45);
+  const mode = big ? "palm" : "finger";
+  if (p.mode !== mode) { p.last = null; p.mode = mode; }
+  const size = (big ? 110 * ui.palmSize.value : 12 * ui.fingerSize.value) * DPR;
+  const evts = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ev of evts.length ? evts : [e]) strokeTo(p, ev.clientX * DPR, ev.clientY * DPR, size, mode);
+}
+
+// ---------- main loop ----------
+function loop(t) {
+  frameNo++;
+  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const ts = performance.now();
+    try {
+      if (handLandmarker) processHands(handLandmarker.detectForVideo(video, ts), ts);
+      // hands get every frame; while a hand is up, the face runs every other frame
+      if (faceLandmarker && (!hands.length || frameNo % 2 === 0)) readFace(faceLandmarker.detectForVideo(video, ts));
+      trackFrames++;
+    } catch (e) { console.warn(e); }
+  }
+  updateBreath();
+  updateDrips();
+  themeAmt += ((themeOn ? 1 : 0) - themeAmt) * 0.06;
+  glitch *= 0.9;
+  render(t);
+  drawOverlay();
+  updateStatus();
+  requestAnimationFrame(loop);
+}
+
+function updateStatus() {
+  let m = "no hand", c = "#888";
+  const modes = hands.map((h) => h.mode);
+  if (pointers.size) { m = "drawing"; c = "#9fd8ff"; }
+  else if (modes.includes("palm")) { m = "palm · wiping"; c = "#ffd296"; }
+  else if (modes.includes("finger")) { m = "finger · drawing"; c = "#9fd8ff"; }
+  else if (modes.includes("theme")) { m = themeOn ? "hold to exit sigil mode…" : "hold for sigil mode… ✧"; c = "#f3b6d8"; }
+  else if (modes.length) m = "hand · not touching";
+  if (!handLandmarker && video.readyState >= 2) m = "loading hand tracking…";
+  if (faceLandmarker && face && ui.breathSrc.value !== "mic") {
+    if (mouthState.outOfView) { m = "mouth out of view — sit back or tilt the camera down"; c = "#ff8a8a"; }
+    else if (!mouthState.base) { m = "calibrating — keep your mouth still 😐"; c = "#ffd296"; }
+  }
+  if (breath > 0.12) { m = breathKind === "hah" ? "breathing 😮" : "blowing 😗"; c = "#ffb4c8"; }
+  modeText.textContent = m; modeDot.style.background = c;
+}
+
+// ---------- startup ----------
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+  });
+  video.srcObject = stream;
+  await video.play();
+  updateVideoRect();
+}
+
+async function loadModels() {
+  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const withDelegate = async (fn) => { try { return await fn("GPU"); } catch { return await fn("CPU"); } };
+  handLandmarker = await withDelegate((delegate) => HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate },
+    runningMode: "VIDEO", numHands: 2,
+    minHandDetectionConfidence: 0.55, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+  }));
+  try {
+    faceLandmarker = await withDelegate((delegate) => FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate },
+      runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true,
+    }));
+  } catch (e) {
+    console.warn("face tracking unavailable, falling back to mic", e);
+    ui.breathSrc.value = "mic"; startMic();
+  }
+}
+
+$("startBtn").addEventListener("click", async () => {
+  const btn = $("startBtn"), note = $("introNote");
+  btn.disabled = true; note.textContent = "Asking for camera…";
+  try { await startCamera(); }
+  catch { note.textContent = "Camera blocked — you can still draw with mouse/touch."; }
+  if (ui.breathSrc.value !== "mouth") await startMic();
+  fogUp();
+  $("intro").classList.add("hidden");
+  loadModels().catch((e) => { console.error(e); modeText.textContent = "tracking failed — use mouse/touch"; });
+  setTimeout(() => ($("hint").style.opacity = 0), 14000);
+});
+
+// ---------- controls ----------
+$("refogBtn").onclick = fogUp;
+$("calBtn").onclick = recalibrateMouth;
+$("themeBtn").onclick = () => toggleTheme();
+$("skelBtn").onclick = () => { showSkeleton = !showSkeleton; $("skelBtn").classList.toggle("on", showSkeleton); };
+$("setBtn").onclick = () => { $("settings").classList.toggle("open"); $("setBtn").classList.toggle("on"); };
+$("snapBtn").onclick = snapshot;
+ui.breathSrc.onchange = () => { if (ui.breathSrc.value !== "mouth") startMic(); };
+function snapshot() {
+  render(performance.now());
+  const a = document.createElement("a");
+  a.download = `fogged-glass-${Date.now()}.png`;
+  a.href = stage.toDataURL("image/png");
+  a.click();
+}
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { keyBreath = true; e.preventDefault(); }
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === "r") fogUp();
+  if (k === "t") toggleTheme();
+  if (k === "c") recalibrateMouth();
+  if (k === "h") $("skelBtn").click();
+  if (k === "s") snapshot();
+  if (k === "u") document.body.classList.toggle("hidden-ui");
+  if (k === "f") document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
+});
+addEventListener("keyup", (e) => { if (e.code === "Space") keyBreath = false; });
+addEventListener("resize", () => { resize(); drawFrame(); });
+video.addEventListener("loadedmetadata", updateVideoRect);
+
+try { initGL(); } catch (e) { console.error(e); $("err").style.display = "grid"; $("err").querySelector("p").textContent = e.message; }
+resize();
+fogUp();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
