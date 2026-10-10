@@ -1058,224 +1058,111 @@ function blade(g, x0, y0, cx, cy, x1, y1, w, taper = 1.4, rootTaper = false) {
   g.closePath(); g.fill();
 }
 
-// ---- gothic-tribal frame kit ------------------------------------------------
-// Filled outline built from a centre path + a width profile (0..1 along the path).
-function ribbon(g, pts, w, prof) {
-  const n = pts.length - 1, L = [], R = [];
-  for (let i = 0; i <= n; i++) {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)];
-    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
-    const ww = w * prof(i / n);
-    L.push([pts[i][0] - dy / len * ww, pts[i][1] + dx / len * ww]);
-    R.push([pts[i][0] + dy / len * ww, pts[i][1] - dx / len * ww]);
+// Corner sigil in unit space (0..1 ~ ornament size).
+// v.diag mirrors it across the diagonal (both edges); v.needle / v.hook / v.stars toggle pieces,
+// so every corner can be a different variation.
+function cornerSigil(g, s, v = {}) {
+  const { diag = true, needle = true, hook = true, stars = true } = v;
+  const B = (a, b, c, d, e, f, w, tp, rt) => {
+    blade(g, a * s, b * s, c * s, d * s, e * s, f * s, w * s, tp, rt);
+    if (diag) blade(g, b * s, a * s, d * s, c * s, f * s, e * s, w * s, tp, rt);
+  };
+  B(0.04, 0.05, 0.55, -0.03, 1.45, 0.07, 0.026, 1.6);       // long sweep along the edge
+  if (hook) {
+    B(0.06, 0.07, 0.5, 0.12, 0.42, 0.38, 0.02, 1.3);        // inward hook
+    B(0.42, 0.38, 0.3, 0.5, 0.18, 0.44, 0.008, 1.0, true);  // hook curls back
   }
-  g.beginPath();
-  L.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
-  for (let i = R.length - 1; i >= 0; i--) g.lineTo(R[i][0], R[i][1]);
-  g.closePath(); g.fill();
-}
-const PROF = {
-  both: (t) => Math.pow(Math.sin(Math.PI * t), 0.7),                      // crescent: needle - fat - needle
-  root: (t) => Math.pow(1 - t, 1.1) * Math.min(1, 0.45 + t * 5),           // hook: fat root -> needle
-  line: (t) => Math.min(1, t * 10, (1 - t) * 10) * (0.75 + 0.25 * Math.sin(t * 37)), // long edge line, slightly uneven
-};
-// straight tapered line
-function needle(g, x0, y0, x1, y1, w, prof = PROF.line) {
-  const pts = []; for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]); }
-  ribbon(g, pts, w, prof);
-}
-// arc (crescent / hook). angles in radians, a0 -> a1
-function arcB(g, cx, cy, r, a0, a1, w, prof = PROF.both) {
-  const pts = []; for (let i = 0; i <= 40; i++) { const a = a0 + (a1 - a0) * i / 40; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
-  ribbon(g, pts, w, prof);
-}
-// quadratic curve stroke
-function curveB(g, x0, y0, cx, cy, x1, y1, w, prof = PROF.root) {
-  const pts = []; for (let i = 0; i <= 32; i++) { const t = i / 32, u = 1 - t; pts.push([u*u*x0 + 2*u*t*cx + t*t*x1, u*u*y0 + 2*u*t*cy + t*t*y1]); }
-  ribbon(g, pts, w, prof);
-}
-// little pointed cross / star
-function crossStar(g, x, y, s, w) {
-  needle(g, x - s, y, x + s, y, w, PROF.both);
-  needle(g, x, y - s * 1.4, x, y + s * 1.4, w, PROF.both);
+  B(0.36, 0.03, 0.44, 0.08, 0.52, 0.2, 0.012, 1.2, true);   // thorns
+  B(0.72, 0.04, 0.8, 0.07, 0.9, 0.16, 0.009, 1.2, true);
+  B(1.0, 0.055, 1.05, 0.0, 1.12, -0.03, 0.007, 1.0, true);
+  B(0.2, 0.06, 0.28, 0.2, 0.22, 0.3, 0.008, 1.2, true);
+  if (needle) {
+    blade(g, 0.05 * s, 0.05 * s, 0.32 * s, 0.32 * s, 0.68 * s, 0.68 * s, 0.014 * s, 1.1);
+    if (stars) sparkle(g, 0.62 * s, 0.62 * s, 0.09 * s, Math.PI / 4, g.fillStyle);
+  }
+  if (stars) sparkle(g, 0.26 * s, 0.26 * s, 0.05 * s, 0, g.fillStyle);
 }
 
-// Tribal sword guard, drawn along a local vertical axis (blade runs along +y / -y).
-function guard(g, s) {
+// Crest: pointed heart pierced by a dagger, with thorned wings. `lop` makes one wing shorter.
+function centerSigil(g, t, lop = 1) {
+  blade(g, 0, 0.0, 0, 0.5 * t, 0, 1.25 * t, 0.028 * t, 1.2, true);
+  blade(g, -0.16 * t, 0.2 * t, 0, 0.2 * t, 0.16 * t, 0.2 * t, 0.012 * t, 0.2, true);
   for (const d of [-1, 1]) {
-    curveB(g, d * 0.04 * s, 0, d * 0.62 * s, -0.08 * s, d * 0.5 * s, 0.62 * s, 0.075 * s);      // big sickle horns
-    curveB(g, d * 0.05 * s, -0.12 * s, d * 0.34 * s, -0.12 * s, d * 0.3 * s, -0.42 * s, 0.05 * s); // upper hooks
-    arcB(g, d * 0.22 * s, 0.2 * s, 0.1 * s, d > 0 ? -2.2 : 5.35, d > 0 ? 1.0 : 2.15, 0.035 * s, PROF.root); // inner curls
-    curveB(g, d * 0.03 * s, 0.28 * s, d * 0.18 * s, 0.34 * s, d * 0.14 * s, 0.6 * s, 0.03 * s);   // drip claws
-  }
-  g.beginPath(); g.ellipse(0, -0.05 * s, 0.07 * s, 0.1 * s, 0, 0, Math.PI * 2); g.fill();         // knot
-  needle(g, -0.18 * s, -0.24 * s, 0.18 * s, -0.24 * s, 0.03 * s, PROF.both);                      // crossbar
-}
-// sword: needle blade through a guard. (x, y) = guard position, ang = blade direction
-function sword(g, x, y, ang, len, s, back = 0.35) {
-  g.save(); g.translate(x, y); g.rotate(ang - Math.PI / 2);
-  needle(g, 0, -len * back, 0, len, 0.028 * s, PROF.both);
-  guard(g, s);
-  g.restore();
-}
-// arch: ∩ with pointed feet, the repeating unit of the top-left cluster
-function arch(g, x, y, r, w) {
-  arcB(g, x, y, r, Math.PI * 1.05, Math.PI * 1.95, w, PROF.both);
-  curveB(g, x - r * 0.98, y - r * 0.1, x - r * 1.05, y + r * 0.5, x - r * 0.75, y + r * 1.1, w * 0.8);
-  curveB(g, x + r * 0.98, y - r * 0.1, x + r * 1.05, y + r * 0.5, x + r * 0.75, y + r * 1.1, w * 0.8);
-}
-
-// Top-left ornament cluster. Local space: corner at (0,0), x along top edge, y down the side.
-function cornerCluster(g, s) {
-  // arches marching along the top...
-  arch(g, 0.2 * s, 0.13 * s, 0.11 * s, 0.05 * s);
-  arch(g, 0.48 * s, 0.11 * s, 0.1 * s, 0.045 * s);
-  arch(g, 0.74 * s, 0.13 * s, 0.09 * s, 0.04 * s);
-  // ...and a big swirl handing off to the long top line
-  arcB(g, 1.02 * s, 0.12 * s, 0.12 * s, Math.PI * 0.85, Math.PI * 2.35, 0.05 * s, PROF.root);
-  curveB(g, 0.95 * s, 0.24 * s, 1.15 * s, 0.32 * s, 1.35 * s, 0.18 * s, 0.035 * s);
-  arcB(g, 1.28 * s, 0.05 * s, 0.13 * s, Math.PI * 0.35, Math.PI * 0.95, 0.03 * s, PROF.both);
-  curveB(g, 1.1 * s, 0.0, 1.45 * s, -0.02 * s, 2.0 * s, 0.03 * s, 0.03 * s);                     // tail into the edge line
-  // down the left side: hooks and a sickle
-  arcB(g, 0.06 * s, 0.4 * s, 0.14 * s, -Math.PI * 0.55, Math.PI * 0.45, 0.04 * s, PROF.both);
-  curveB(g, 0.02 * s, 0.25 * s, -0.08 * s, 0.6 * s, 0.1 * s, 0.95 * s, 0.05 * s, PROF.both);
-  curveB(g, 0.08 * s, 0.5 * s, 0.32 * s, 0.5 * s, 0.34 * s, 0.75 * s, 0.035 * s);
-  arcB(g, 0.2 * s, 0.62 * s, 0.09 * s, -1.4, 2.4, 0.03 * s, PROF.root);
-  // knots and a diamond
-  g.beginPath(); g.ellipse(0.34 * s, 0.24 * s, 0.05 * s, 0.035 * s, 0.4, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(0.62 * s, 0.25 * s, 0.04 * s, 0.03 * s, -0.3, 0, Math.PI * 2); g.fill();
-  crossStar(g, 0.98 * s, 0.12 * s, 0.03 * s, 0.01 * s);
-}
-
-// Bottom-right: big crescent wrapped in swirls, crosses and stars. Local origin = corner.
-function crescentCluster(g, s) {
-  arcB(g, -0.55 * s, -0.95 * s, 0.85 * s, -0.25, 1.35, 0.05 * s, PROF.both);                     // the crescent
-  arcB(g, -0.5 * s, -0.9 * s, 0.7 * s, -0.1, 1.2, 0.025 * s, PROF.both);
-  // swirls climbing the crescent
-  const sw = [[-0.32, -0.55, 0.1, 0.4], [-0.2, -0.85, 0.08, 1.3], [-0.42, -0.3, 0.12, 3.6], [-0.62, -0.18, 0.09, 2.2]];
-  for (const [x, y, r, a] of sw) arcB(g, x * s, y * s, r * s, a, a + 4.2, 0.03 * s, PROF.root);
-  for (const [x, y, r, a] of sw) curveB(g, (x + r * Math.cos(a)) * s, (y + r * Math.sin(a)) * s, (x + 0.1) * s, (y - 0.2) * s, (x + 0.2) * s, (y - 0.05) * s, 0.02 * s);
-  // crosses
-  sword(g, -0.45 * s, -0.62 * s, Math.PI / 2, 0.3 * s, 0.32 * s, 0.6);
-  sword(g, -1.15 * s, -0.12 * s, Math.PI / 2, 0.25 * s, 0.38 * s, 0.9);
-  crossStar(g, -0.25 * s, -0.42 * s, 0.035 * s, 0.01 * s);
-  crossStar(g, -0.78 * s, -0.5 * s, 0.025 * s, 0.008 * s);
-  // spikes along the bottom edge
-  curveB(g, -0.3 * s, -0.04 * s, -0.6 * s, -0.12 * s, -0.95 * s, -0.05 * s, 0.04 * s);
-  curveB(g, -0.9 * s, -0.06 * s, -1.0 * s, -0.2 * s, -0.9 * s, -0.32 * s, 0.03 * s);
-  curveB(g, -0.05 * s, -0.25 * s, 0.0, -0.45 * s, -0.08 * s, -0.7 * s, 0.035 * s);
-}
-
-// Lay out the whole (deliberately asymmetric) frame.
-function drawGothicFrame(g) {
-  const S = Math.min(W, H), m = S * 0.035, s = S * 0.3;
-  const lw = Math.max(1.2 * DPR, S * 0.004);
-  // long edge lines, with gaps like the reference
-  needle(g, W * 0.3, m, W - m * 2.5, m * 1.1, lw);
-  needle(g, m, H * 0.2, m * 1.05, H - m * 0.5, lw);
-  needle(g, W - m, H * 0.1, W - m * 1.05, H * 0.6, lw);
-  needle(g, W * 0.07, H - m * 1.3, W * 0.72, H - m * 1.2, lw * 1.2);
-  // top-left cluster (and a smaller echo top-right)
-  g.save(); g.translate(m * 0.6, m * 0.6); cornerCluster(g, s); g.restore();
-  g.save(); g.translate(W - m * 0.6, m * 0.6); g.scale(-0.6, 0.6); cornerCluster(g, s); g.restore();
-  sword(g, W * 0.78, m * 1.1, Math.PI / 2, s * 0.5, s * 0.45, 0.2);
-  // swords on the sides
-  sword(g, m, H * 0.3, Math.PI / 2, s * 0.6, s * 0.6, 0.7);
-  sword(g, m, H * 0.68, Math.PI / 2, s * 0.75, s * 0.75, 0.8);
-  sword(g, W - m, H * 0.36, Math.PI / 2, s * 0.5, s * 0.5, 0.8);
-  // bottom-left sword crossing the bottom line
-  sword(g, W * 0.1, H - m * 2.5, Math.PI / 2, s * 0.5, s * 0.4, 0.5);
-  // bottom-right crescent
-  g.save(); g.translate(W - m * 0.6, H - m * 0.6); crescentCluster(g, s * 1.15); g.restore();
-  // tiny floating sigils
-  crossStar(g, W * 0.24, H * 0.7, s * 0.04, s * 0.012);
-  crossStar(g, W * 0.88, H * 0.62, s * 0.03, s * 0.01);
-}
-
-// Rough, slightly distressed ink: punch tiny specks out of the linework.
-function distress(g) {
-  const rnd = (() => { let a = 1337; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; })();
-  g.save(); g.globalCompositeOperation = "destination-out";
-  const n = Math.round(W * H / 220);
-  for (let i = 0; i < n; i++) {
-    g.fillStyle = `rgba(0,0,0,${0.35 + rnd() * 0.6})`;
-    g.beginPath(); g.arc(rnd() * W, rnd() * H, (0.4 + rnd() * 0.9) * DPR, 0, Math.PI * 2); g.fill();
-  }
-  g.restore();
-}
-
-// ---- "Sigil Frames v2 · 01 Void" layout, using the designed PNG pieces ----------
-// Pieces live in assets/iw/<name>.png (white ink). Coordinates are from the 600×800 design;
-// each piece is anchored to its nearest screen edges so the frame adapts to any aspect ratio.
-const SIGIL_SZ = { "a-full": [766, 952], "a-node": [215, 320], "a-node2": [130, 180], "a-needle": [54, 252], "a-arm": [486, 205], "a-corner": [280, 240], "b-full": [822, 1018], "b-star": [252, 585], "b-cross": [175, 200], "b-vine": [240, 400], "b-bar": [320, 160], "b-glyph": [55, 55], "b-moon": [135, 150], "b-tl": [260, 220] };
-const VOID_FRAME = { W: 600, H: 800, items: [
-  { t: "p", n: "a-full", x: -6, y: -6, w: 330 },
-  { t: "n", x1: 60, y1: 360, x2: 60, y2: 560, w: 5, pk: 0.4 },
-  { t: "p", n: "a-node", x: 12, y: 520, w: 95 },
-  { t: "p", n: "a-needle", x: 49, y: 650, w: 22 },
-  { t: "n", x1: 24, y1: 712, x2: 330, y2: 706, w: 4, pk: 0.15 }, { t: "d", x: 60, y: 709, s: 9, rot: 90 },
-  { t: "p", n: "b-full", x: 312, y: 441, w: 300, fx: -1 },
-  { t: "p", n: "a-corner", x: 498, y: -8, w: 110, fx: -1 },
-  { t: "n", x1: 578, y1: 70, x2: 578, y2: 470, w: 4, pk: 0.5 },
-  { t: "p", n: "a-node", x: 538, y: 230, w: 80, fx: -1 },
-  { t: "n", x1: 290, y1: 43, x2: 545, y2: 40, w: 3.5, pk: 0.2 },
-  { t: "p", n: "b-cross", x: 435, y: 19, w: 70, fy: -1 },
-  { t: "p", n: "b-glyph", x: 120, y: 560, w: 18 },
-  { t: "d", x: 205, y: 43, s: 6, rot: 0 }, { t: "d", x: 380, y: 42, s: 4, rot: 0 },
-] };
-let sigilImgs = null;
-function loadSigilAssets() {
-  const names = [...new Set(VOID_FRAME.items.filter((i) => i.t === "p").map((i) => i.n))];
-  Promise.all(names.map((n) => new Promise((res) => {
-    const im = new Image(); im.onload = () => res([n, im]); im.onerror = () => res(null); im.src = `assets/iw/${n}.png`;
-  }))).then((r) => {
-    if (r.every(Boolean)) { sigilImgs = Object.fromEntries(r); if (W) drawFrame(); }
-    else console.info("sigil art not found in assets/iw/ — using the drawn frame");
-  });
-}
-function drawVoidFrame(g, ink) {
-  const F = VOID_FRAME, k = Math.min(W / F.W, H / F.H);
-  const ax = (x) => (x < F.W / 2 ? x * k : W - (F.W - x) * k);
-  const ay = (y) => (y < F.H / 2 ? y * k : H - (F.H - y) * k);
-  for (const it of F.items) {
-    if (it.t === "p") {
-      const [sw, sh] = SIGIL_SZ[it.n], h = it.w * sh / sw;
-      g.save();
-      g.translate(ax(it.x + it.w / 2), ay(it.y + h / 2));
-      g.scale(it.fx || 1, it.fy || 1);
-      g.drawImage(sigilImgs[it.n], -it.w * k / 2, -h * k / 2, it.w * k, h * k);
-      g.restore();
-    } else if (it.t === "n") {
-      const x1 = ax(it.x1), y1 = ay(it.y1), x2 = ax(it.x2), y2 = ay(it.y2);
-      const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy), nx = -dy / L * it.w * k / 2, ny = dx / L * it.w * k / 2;
-      const mx = x1 + dx * it.pk, my = y1 + dy * it.pk;
-      g.fillStyle = ink; g.beginPath();
-      g.moveTo(x1, y1); g.lineTo(mx + nx, my + ny); g.lineTo(x2, y2); g.lineTo(mx - nx, my - ny); g.closePath(); g.fill();
-    } else {
-      const r = it.rot * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), a = it.s * k, b = it.s * 0.4 * k, x = ax(it.x), y = ay(it.y);
-      g.fillStyle = ink; g.beginPath();
-      g.moveTo(x + c * a, y + sn * a); g.lineTo(x - sn * b, y + c * b); g.lineTo(x - c * a, y - sn * a); g.lineTo(x + sn * b, y - c * b); g.closePath(); g.fill();
+    const k = d > 0 ? 1 : lop;   // wing length on this side
+    g.save(); g.scale(d, 1);
+    blade(g, 0.0, 0.42 * t, 0.02 * t, 0.2 * t, 0.2 * t, 0.26 * t, 0.012 * t, 0.3, true);
+    blade(g, 0.2 * t, 0.26 * t, 0.36 * t, 0.36 * t, 0.0, 0.78 * t, 0.016 * t, 1.1, true);
+    blade(g, 0.2 * t, 0.3 * t, 0.75 * t * k, 0.0, 1.7 * t * k, 0.12 * t, 0.045 * t, 1.6);
+    blade(g, 0.24 * t, 0.42 * t, 0.8 * t * k, 0.62 * t, 1.25 * t * k, 0.36 * t, 0.032 * t, 1.5);
+    blade(g, 0.8 * t * k, 0.08 * t, 0.95 * t * k, 0.2 * t, 1.0 * t * k, 0.36 * t, 0.012 * t, 1.1, true);
+    if (k > 0.8) {
+      blade(g, 1.2 * t, 0.1 * t, 1.3 * t, -0.02 * t, 1.42 * t, -0.06 * t, 0.01 * t, 1.1, true);
+      blade(g, 0.62 * t, 0.56 * t, 0.66 * t, 0.72 * t, 0.58 * t, 0.86 * t, 0.01 * t, 1.1, true);
+      sparkle(g, 1.85 * t, 0.12 * t, 0.12 * t, 0, g.fillStyle);
     }
+    g.restore();
   }
 }
 
+// side accent: a crescent with a needle pointing into the glass
+function sideAccent(g, t, long = 1) {
+  blade(g, 0, -0.5 * t, 0.25 * t, 0, 0, 0.5 * t, 0.02 * t, 0.3, true);
+  blade(g, 0.05 * t, 0, 0.3 * t * long, -0.05 * t, 0.55 * t * long, 0, 0.018 * t, 1.4);
+  sparkle(g, 0.62 * t * long, 0, 0.08 * t, 0, g.fillStyle);
+}
+
+// The frame: white linework, deliberately NOT symmetrical — every corner and side differs.
 function drawFrame() {
   frameCanvas.width = W; frameCanvas.height = H;
   const g = fctx;
-  if (sigilImgs) {   // the designed artwork, when present
-    // soft dark halo underneath, then the art again on top so the ink stays crisp white
-    g.save(); g.shadowColor = "rgba(8,4,12,0.7)"; g.shadowBlur = 8 * DPR; g.globalAlpha = 0.6; drawVoidFrame(g, "#ffffff"); g.restore();
-    drawVoidFrame(g, "#ffffff");
-    return;
-  }
-  // dark halo so the ink reads over bright fog
-  g.save(); g.shadowColor = "rgba(8,4,12,0.85)"; g.shadowBlur = 9 * DPR; g.fillStyle = "rgba(8,4,12,0.5)";
-  drawGothicFrame(g); g.restore();
-  // off-white ink on its own layer, distressed, then composited on top
-  const ink = document.createElement("canvas"); ink.width = W; ink.height = H;
-  const ig = ink.getContext("2d");
-  ig.fillStyle = "#f3efe8"; drawGothicFrame(ig); distress(ig);
-  g.save(); g.shadowColor = "rgba(255,240,250,0.55)"; g.shadowBlur = 4 * DPR; g.drawImage(ink, 0, 0); g.restore();
+  const m = Math.min(W, H) * 0.028;
+  const s = Math.min(W, H) * 0.24;
+  const t = Math.min(W, H) * 0.15;
+
+  const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+  vg.addColorStop(0, "rgba(30,12,30,0)"); vg.addColorStop(0.7, "rgba(30,12,30,0)"); vg.addColorStop(1, "rgba(30,12,30,0.32)");
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+
+  const drawAll = () => {
+    g.save();
+    g.lineWidth = Math.max(1, DPR * 0.8);
+    g.strokeStyle = g.fillStyle;
+    g.globalAlpha *= 0.55;
+    g.strokeRect(m * 1.15, m * 1.15, W - m * 2.3, H - m * 2.3);
+    g.restore();
+    const corner = (sx, sy, k, v) => { g.save(); g.translate(sx < 0 ? W - m : m, sy < 0 ? H - m : m); g.scale(sx, sy); cornerSigil(g, s * k, v); g.restore(); };
+    corner(1, 1, 1.2, {});                                              // top-left: big and full
+    corner(-1, 1, 0.75, { diag: false, needle: false });                // top-right: just a sweep along the top
+    corner(1, -1, 0.85, { diag: false, hook: false });                  // bottom-left: sweep + needle
+    corner(-1, -1, 1.35, {});                                           // bottom-right: the biggest
+    // crests off-centre, one wing clipped
+    g.save(); g.translate(W * 0.62, m * 0.6); centerSigil(g, t, 0.6); g.restore();
+    g.save(); g.translate(W * 0.3, H - m * 0.6); g.scale(0.65, -0.65); centerSigil(g, t, 1.0); g.restore();
+    // sides: two accents on the left, one lower on the right
+    const side = (left, y, k, long) => { g.save(); g.translate(left ? m * 1.15 : W - m * 1.15, y); g.scale(left ? k : -k, k); sideAccent(g, t, long); g.restore(); };
+    side(true, H * 0.4, 1.1, 1.3);
+    side(true, H * 0.68, 0.6, 0.8);
+    side(false, H * 0.56, 0.85, 1.0);
+  };
+
+  // pass 0: dark underlay (keeps the white readable over bright areas)
+  g.save();
+  g.shadowColor = "rgba(20,8,28,0.6)"; g.shadowBlur = 6 * DPR;
+  g.fillStyle = "rgba(30,14,38,0.35)";
+  drawAll();
+  g.restore();
+  // pass 1: pink glow
+  g.save();
+  g.shadowColor = "rgba(255,140,205,0.85)"; g.shadowBlur = 14 * DPR;
+  g.fillStyle = "rgba(255,190,225,0.55)";
+  drawAll();
+  g.restore();
+  // pass 2: solid white
+  g.save();
+  g.shadowColor = "rgba(14,6,22,0.85)"; g.shadowBlur = 3 * DPR; g.shadowOffsetY = 1 * DPR;
+  g.fillStyle = "#ffffff";
+  drawAll();
+  g.restore();
 }
 
 // ---------- pointer (mouse / touch) ----------
@@ -1416,7 +1303,6 @@ video.addEventListener("loadedmetadata", updateVideoRect);
 try { initGL(); } catch (e) { console.error(e); $("err").style.display = "grid"; $("err").querySelector("p").textContent = e.message; }
 resize();
 fogUp();
-loadSigilAssets();
 requestAnimationFrame(loop);
 </script>
 </body>
