@@ -1124,12 +1124,6 @@ function drawFrame() {
   g.fillStyle = vg; g.fillRect(0, 0, W, H);
 
   const drawAll = () => {
-    g.save();
-    g.lineWidth = Math.max(1, DPR * 0.8);
-    g.strokeStyle = g.fillStyle;
-    g.globalAlpha *= 0.55;
-    g.strokeRect(m * 1.15, m * 1.15, W - m * 2.3, H - m * 2.3);
-    g.restore();
     const corner = (sx, sy, k, v) => { g.save(); g.translate(sx < 0 ? W - m : m, sy < 0 ? H - m : m); g.scale(sx, sy); cornerSigil(g, s * k, v); g.restore(); };
     corner(1, 1, 1.2, {});                                              // top-left: big and full
     corner(-1, 1, 0.75, { diag: false, needle: false });                // top-right: just a sweep along the top
@@ -1145,21 +1139,9 @@ function drawFrame() {
     side(false, H * 0.56, 0.85, 1.0);
   };
 
-  // pass 0: dark underlay (keeps the white readable over bright areas)
+  // flat white linework with only a soft white glow (no dark edges or shading lines)
   g.save();
-  g.shadowColor = "rgba(20,8,28,0.6)"; g.shadowBlur = 6 * DPR;
-  g.fillStyle = "rgba(30,14,38,0.35)";
-  drawAll();
-  g.restore();
-  // pass 1: pink glow
-  g.save();
-  g.shadowColor = "rgba(255,140,205,0.85)"; g.shadowBlur = 14 * DPR;
-  g.fillStyle = "rgba(255,190,225,0.55)";
-  drawAll();
-  g.restore();
-  // pass 2: solid white
-  g.save();
-  g.shadowColor = "rgba(14,6,22,0.85)"; g.shadowBlur = 3 * DPR; g.shadowOffsetY = 1 * DPR;
+  g.shadowColor = "rgba(255,255,255,0.6)"; g.shadowBlur = 6 * DPR;
   g.fillStyle = "#ffffff";
   drawAll();
   g.restore();
