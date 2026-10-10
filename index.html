@@ -1111,7 +1111,7 @@ function sideAccent(g, t, long = 1) {
   sparkle(g, 0.62 * t * long, 0, 0.08 * t, 0, g.fillStyle);
 }
 
-// The frame: white linework, deliberately NOT symmetrical — every corner and side differs.
+// The frame: flat white linework, symmetric, hearts centred top and bottom.
 function drawFrame() {
   frameCanvas.width = W; frameCanvas.height = H;
   const g = fctx;
@@ -1124,19 +1124,15 @@ function drawFrame() {
   g.fillStyle = vg; g.fillRect(0, 0, W, H);
 
   const drawAll = () => {
-    const corner = (sx, sy, k, v) => { g.save(); g.translate(sx < 0 ? W - m : m, sy < 0 ? H - m : m); g.scale(sx, sy); cornerSigil(g, s * k, v); g.restore(); };
-    corner(1, 1, 1.2, {});                                              // top-left: big and full
-    corner(-1, 1, 0.75, { diag: false, needle: false });                // top-right: just a sweep along the top
-    corner(1, -1, 0.85, { diag: false, hook: false });                  // bottom-left: sweep + needle
-    corner(-1, -1, 1.35, {});                                           // bottom-right: the biggest
-    // crests off-centre, one wing clipped
-    g.save(); g.translate(W * 0.62, m * 0.6); centerSigil(g, t, 0.6); g.restore();
-    g.save(); g.translate(W * 0.3, H - m * 0.6); g.scale(0.65, -0.65); centerSigil(g, t, 1.0); g.restore();
-    // sides: two accents on the left, one lower on the right
-    const side = (left, y, k, long) => { g.save(); g.translate(left ? m * 1.15 : W - m * 1.15, y); g.scale(left ? k : -k, k); sideAccent(g, t, long); g.restore(); };
-    side(true, H * 0.4, 1.1, 1.3);
-    side(true, H * 0.68, 0.6, 0.8);
-    side(false, H * 0.56, 0.85, 1.0);
+    const corner = (sx, sy) => { g.save(); g.translate(sx < 0 ? W - m : m, sy < 0 ? H - m : m); g.scale(sx, sy); cornerSigil(g, s); g.restore(); };
+    corner(1, 1); corner(-1, 1); corner(1, -1); corner(-1, -1);
+    // hearts always centred, top and bottom
+    g.save(); g.translate(W / 2, m * 0.6); centerSigil(g, t); g.restore();
+    g.save(); g.translate(W / 2, H - m * 0.6); g.scale(0.7, -0.7); centerSigil(g, t); g.restore();
+    // matching side accents
+    for (const left of [true, false]) {
+      g.save(); g.translate(left ? m * 1.15 : W - m * 1.15, H / 2); g.scale(left ? 1 : -1, 1); sideAccent(g, t); g.restore();
+    }
   };
 
   // flat white linework with only a soft white glow (no dark edges or shading lines)
