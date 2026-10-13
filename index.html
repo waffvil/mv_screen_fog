@@ -1085,23 +1085,74 @@ function cornerSigil(g, s, v = {}) {
   if (stars) sparkle(g, 0.26 * s, 0.26 * s, 0.05 * s, 0, g.fillStyle);
 }
 
-// Crest: pointed heart pierced by a dagger, with thorned wings. `lop` makes one wing shorter.
-function centerSigil(g, t, lop = 1) {
-  blade(g, 0, 0.0, 0, 0.5 * t, 0, 1.25 * t, 0.028 * t, 1.2, true);
-  blade(g, -0.16 * t, 0.2 * t, 0, 0.2 * t, 0.16 * t, 0.2 * t, 0.012 * t, 0.2, true);
+// ---- continuous-stroke kit: every piece grows out of its parent at matching width/tangent ----
+// Cubic ribbon with a width function wf(u). Returns a sampler u -> {x, y, tx, ty, w}.
+function ribbonCubic(g, p0, p1, p2, p3, wf, N = 48) {
+  const at = (u) => {
+    const v = 1 - u;
+    const x = v*v*v*p0[0] + 3*v*v*u*p1[0] + 3*v*u*u*p2[0] + u*u*u*p3[0];
+    const y = v*v*v*p0[1] + 3*v*v*u*p1[1] + 3*v*u*u*p2[1] + u*u*u*p3[1];
+    let tx = 3*v*v*(p1[0]-p0[0]) + 6*v*u*(p2[0]-p1[0]) + 3*u*u*(p3[0]-p2[0]);
+    let ty = 3*v*v*(p1[1]-p0[1]) + 6*v*u*(p2[1]-p1[1]) + 3*u*u*(p3[1]-p2[1]);
+    const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    return { x, y, tx, ty, w: wf(u) };
+  };
+  const L = [], R = [];
+  for (let i = 0; i <= N; i++) {
+    const a = at(i / N);
+    L.push([a.x - a.ty * a.w, a.y + a.tx * a.w]); R.push([a.x + a.ty * a.w, a.y - a.tx * a.w]);
+  }
+  g.beginPath();
+  L.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+  for (let i = R.length - 1; i >= 0; i--) g.lineTo(R[i][0], R[i][1]);
+  g.closePath(); g.fill();
+  // round the joint at the start so it melts into whatever it grows from
+  const s0 = at(0);
+  if (s0.w > 0.5) { g.beginPath(); g.arc(s0.x, s0.y, s0.w, 0, Math.PI * 2); g.fill(); }
+  return at;
+}
+const rot = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+// grow a curling thorn out of a parent stroke: starts at the parent's width, leaves almost tangent
+function sprout(g, parent, u, turn, len, curl, wScale = 0.85) {
+  const a = parent(u);
+  const [dx, dy] = rot(a.tx, a.ty, turn);
+  const [ex, ey] = rot(dx, dy, curl);
+  const [fx, fy] = rot(dx, dy, curl * 2.2);
+  const p0 = [a.x, a.y], p1 = [a.x + dx * len * 0.38, a.y + dy * len * 0.38];
+  const p2 = [p1[0] + ex * len * 0.36, p1[1] + ey * len * 0.36];
+  const p3 = [p2[0] + fx * len * 0.3, p2[1] + fy * len * 0.3];
+  const w0 = a.w * wScale;
+  return ribbonCubic(g, p0, p1, p2, p3, (v) => w0 * Math.pow(1 - v, 1.25));
+}
+// swell from w0 to wMax, then taper to a needle
+const swell = (w0, wMax, peak = 0.3) => (u) => u < peak ? w0 + (wMax - w0) * Math.sin((u / peak) * Math.PI / 2) : wMax * Math.pow((1 - u) / (1 - peak), 1.3);
+
+// Crest: one continuous heart with wings and thorns growing out of it, pierced by a dagger.
+function centerSigil(g, t) {
+  const P = (x, y) => [x * t, y * t];
+  // dagger first, so the heart sits over its middle
+  ribbonCubic(g, P(0, -0.08), P(0, 0.3), P(0, 0.7), P(0, 1.3), (u) => t * (u < 0.28 ? 0.006 + 0.016 * (u / 0.28) : 0.022 * Math.pow((1 - u) / 0.72, 1.1)));
+  ribbonCubic(g, P(-0.2, 0.2), P(-0.08, 0.15), P(0.08, 0.15), P(0.2, 0.2), (u) => t * 0.012 * Math.pow(Math.sin(Math.PI * u), 0.6));
+  g.beginPath(); g.moveTo(0, 0.1 * t); g.lineTo(0.035 * t, 0.165 * t); g.lineTo(0, 0.23 * t); g.lineTo(-0.035 * t, 0.165 * t); g.closePath(); g.fill();
+
   for (const d of [-1, 1]) {
-    const k = d > 0 ? 1 : lop;   // wing length on this side
     g.save(); g.scale(d, 1);
-    blade(g, 0.0, 0.42 * t, 0.02 * t, 0.2 * t, 0.2 * t, 0.26 * t, 0.012 * t, 0.3, true);
-    blade(g, 0.2 * t, 0.26 * t, 0.36 * t, 0.36 * t, 0.0, 0.78 * t, 0.016 * t, 1.1, true);
-    blade(g, 0.2 * t, 0.3 * t, 0.75 * t * k, 0.0, 1.7 * t * k, 0.12 * t, 0.045 * t, 1.6);
-    blade(g, 0.24 * t, 0.42 * t, 0.8 * t * k, 0.62 * t, 1.25 * t * k, 0.36 * t, 0.032 * t, 1.5);
-    blade(g, 0.8 * t * k, 0.08 * t, 0.95 * t * k, 0.2 * t, 1.0 * t * k, 0.36 * t, 0.012 * t, 1.1, true);
-    if (k > 0.8) {
-      blade(g, 1.2 * t, 0.1 * t, 1.3 * t, -0.02 * t, 1.42 * t, -0.06 * t, 0.01 * t, 1.1, true);
-      blade(g, 0.62 * t, 0.56 * t, 0.66 * t, 0.72 * t, 0.58 * t, 0.86 * t, 0.01 * t, 1.1, true);
-      sparkle(g, 1.85 * t, 0.12 * t, 0.12 * t, 0, g.fillStyle);
-    }
+    // heart: cusp -> lobe -> tip, one continuous outline (two tangent-matched halves)
+    const lobe = ribbonCubic(g, P(0, 0.34), P(0.02, 0.16), P(0.31, 0.1), P(0.31, 0.32), (u) => t * (0.01 + 0.024 * u));
+    const tail = ribbonCubic(g, P(0.31, 0.32), P(0.31, 0.5), P(0.12, 0.62), P(0, 0.82), (u) => t * 0.034 * Math.pow(1 - u, 0.9));
+    // upper wing grows off the top of the lobe and sweeps out to a needle
+    const wa = lobe(0.62);
+    const up = ribbonCubic(g, [wa.x, wa.y], [wa.x + wa.tx * 0.3 * t, wa.y + wa.ty * 0.3 * t - 0.12 * t], P(1.0, -0.06), P(1.85, 0.08), swell(wa.w, 0.048 * t, 0.25));
+    // lower wing peels off the outside of the lobe, dips, then curls back up
+    const wb = tail(0.08);
+    const low = ribbonCubic(g, [wb.x, wb.y], [wb.x + 0.35 * t, wb.y + 0.12 * t], P(0.95, 0.68), P(1.38, 0.36), swell(wb.w, 0.036 * t, 0.3));
+    // thorns branching off the wings
+    sprout(g, up, 0.42, -0.5, 0.42 * t, -0.35);          // rises off the upper wing, hooks outward
+    sprout(g, up, 0.7, -0.35, 0.26 * t, -0.4, 0.8);
+    sprout(g, up, 0.55, 0.55, 0.3 * t, 0.45, 0.7);       // drops below the upper wing
+    sprout(g, low, 0.45, 0.6, 0.34 * t, 0.5);            // hangs off the lower wing and curls in
+    sprout(g, low, 0.78, -0.55, 0.2 * t, -0.4, 0.8);
+    sprout(g, tail, 0.55, 0.9, 0.22 * t, 0.6, 0.9);      // small curl under the heart
     g.restore();
   }
 }
