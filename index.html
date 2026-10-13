@@ -1060,31 +1060,6 @@ function blade(g, x0, y0, cx, cy, x1, y1, w, taper = 1.4, rootTaper = false) {
   g.closePath(); g.fill();
 }
 
-// Corner sigil in unit space (0..1 ~ ornament size).
-// v.diag mirrors it across the diagonal (both edges); v.needle / v.hook / v.stars toggle pieces,
-// so every corner can be a different variation.
-function cornerSigil(g, s, v = {}) {
-  const { diag = true, needle = true, hook = true, stars = true } = v;
-  const B = (a, b, c, d, e, f, w, tp, rt) => {
-    blade(g, a * s, b * s, c * s, d * s, e * s, f * s, w * s, tp, rt);
-    if (diag) blade(g, b * s, a * s, d * s, c * s, f * s, e * s, w * s, tp, rt);
-  };
-  B(0.04, 0.05, 0.55, -0.03, 1.45, 0.07, 0.026, 1.6);       // long sweep along the edge
-  if (hook) {
-    B(0.06, 0.07, 0.5, 0.12, 0.42, 0.38, 0.02, 1.3);        // inward hook
-    B(0.42, 0.38, 0.3, 0.5, 0.18, 0.44, 0.008, 1.0, true);  // hook curls back
-  }
-  B(0.36, 0.03, 0.44, 0.08, 0.52, 0.2, 0.012, 1.2, true);   // thorns
-  B(0.72, 0.04, 0.8, 0.07, 0.9, 0.16, 0.009, 1.2, true);
-  B(1.0, 0.055, 1.05, 0.0, 1.12, -0.03, 0.007, 1.0, true);
-  B(0.2, 0.06, 0.28, 0.2, 0.22, 0.3, 0.008, 1.2, true);
-  if (needle) {
-    blade(g, 0.05 * s, 0.05 * s, 0.32 * s, 0.32 * s, 0.68 * s, 0.68 * s, 0.014 * s, 1.1);
-    if (stars) sparkle(g, 0.62 * s, 0.62 * s, 0.09 * s, Math.PI / 4, g.fillStyle);
-  }
-  if (stars) sparkle(g, 0.26 * s, 0.26 * s, 0.05 * s, 0, g.fillStyle);
-}
-
 // ---- continuous-stroke kit: every piece grows out of its parent at matching width/tangent ----
 // Cubic ribbon with a width function wf(u). Returns a sampler u -> {x, y, tx, ty, w}.
 function ribbonCubic(g, p0, p1, p2, p3, wf, N = 48) {
@@ -1157,11 +1132,47 @@ function centerSigil(g, t) {
   }
 }
 
-// side accent: a crescent with a needle pointing into the glass
-function sideAccent(g, t, long = 1) {
-  blade(g, 0, -0.5 * t, 0.25 * t, 0, 0, 0.5 * t, 0.02 * t, 0.3, true);
-  blade(g, 0.05 * t, 0, 0.3 * t * long, -0.05 * t, 0.55 * t * long, 0, 0.018 * t, 1.4);
-  sparkle(g, 0.62 * t * long, 0, 0.08 * t, 0, g.fillStyle);
+// side accent: a crescent with a needle growing out of its middle, pointing into the glass
+function sideAccent(g, t) {
+  const P = (x, y) => [x * t, y * t];
+  const top = ribbonCubic(g, P(0.03, 0), P(0.18, -0.08), P(0.14, -0.38), P(0, -0.55), (u) => t * 0.026 * Math.pow(1 - u, 1.1));
+  const bot = ribbonCubic(g, P(0.03, 0), P(0.18, 0.08), P(0.14, 0.38), P(0, 0.55), (u) => t * 0.026 * Math.pow(1 - u, 1.1));
+  const nd = ribbonCubic(g, P(0.03, 0), P(0.25, -0.01), P(0.45, 0.01), P(0.62, 0), swell(0.026 * t, 0.026 * t, 0.05));
+  sparkle(g, 0.66 * t, 0, 0.09 * t, 0, g.fillStyle);
+  sprout(g, top, 0.4, 0.5, 0.14 * t, 0.4, 0.8);
+  sprout(g, bot, 0.4, -0.5, 0.14 * t, -0.4, 0.8);
+  sprout(g, nd, 0.45, -0.7, 0.1 * t, -0.3, 0.8);
+  sprout(g, nd, 0.45, 0.7, 0.1 * t, 0.3, 0.8);
+}
+
+// Corner sigil: one continuous ornament growing out of the corner knot, mirrored across the diagonal.
+// Local space: corner at (0,0), x runs along the top edge, y down the side; s = ornament size.
+function cornerSigil(g, s) {
+  const P = (x, y) => [x * s, y * s];
+  // diagonal needle first (it is shared by both halves), ending in a 4-point star
+  const diag = ribbonCubic(g, P(0.02, 0.02), P(0.22, 0.22), P(0.44, 0.44), P(0.66, 0.66), swell(0.012 * s, 0.017 * s, 0.25));
+  sparkle(g, 0.67 * s, 0.67 * s, 0.075 * s, Math.PI / 4, g.fillStyle);
+  sprout(g, diag, 0.5, 1.25, 0.09 * s, 0.3, 0.9);         // tiny crossguard barbs on the needle
+  sprout(g, diag, 0.5, -1.25, 0.09 * s, -0.3, 0.9);
+  // corner knot that everything grows out of
+  g.beginPath(); g.ellipse(0.025 * s, 0.025 * s, 0.032 * s, 0.032 * s, 0, 0, Math.PI * 2); g.fill();
+
+  const half = () => {
+    // long sweep along the edge, swelling out of the knot and thinning to a needle
+    const edge = ribbonCubic(g, P(0.02, 0.025), P(0.5, -0.03), P(0.95, 0.07), P(1.5, 0.045), swell(0.03 * s, 0.032 * s, 0.12));
+    // inner loop: peels off the sweep, curls in and comes back to meet the diagonal (teardrop)
+    const loopA = edge(0.1);
+    ribbonCubic(g, [loopA.x, loopA.y], P(0.42, 0.06), P(0.48, 0.36), P(0.3, 0.3), swell(loopA.w * 0.9, 0.022 * s, 0.3));
+    // second, wider arc that echoes the loop
+    const arcA = edge(0.2);
+    ribbonCubic(g, [arcA.x, arcA.y], P(0.55, 0.08), P(0.62, 0.42), P(0.4, 0.5), (u) => arcA.w * 0.55 * Math.pow(1 - u, 1.15));
+    // thorns growing off the sweep, hooking inward
+    sprout(g, edge, 0.38, 0.55, 0.16 * s, 0.45, 0.75);
+    sprout(g, edge, 0.6, 0.6, 0.12 * s, 0.5, 0.75);
+    sprout(g, edge, 0.8, 0.65, 0.08 * s, 0.5, 0.8);
+  };
+  half();
+  g.save(); g.transform(0, 1, 1, 0, 0, 0); half(); g.restore();   // mirror across the diagonal
 }
 
 // The frame: flat white linework, symmetric, hearts centred top and bottom.
