@@ -133,6 +133,7 @@
   <label>Breath sensitivity <input type="range" id="sens" min="0" max="1" step="0.01" value="0.5"></label>
   <label>Finger size <input type="range" id="fingerSize" min="0.5" max="2" step="0.05" value="1"></label>
   <label>Palm size <input type="range" id="palmSize" min="0.5" max="1.8" step="0.05" value="1"></label>
+  <label>Fog thickness <input type="range" id="fogAmt" min="0" max="1" step="0.01" value="0.35"></label>
   <label>Slow natural refog <input type="range" id="ambient" min="0" max="1" step="0.01" value="0"></label>
   <label>Drips <input type="range" id="drips" min="0" max="1" step="0.01" value="0.5"></label>
   <div class="row"><span>Hold <b>Space</b> = breathe</span><span><b>F</b> fullscreen</span></div>
@@ -168,7 +169,7 @@ const video = $("video"), stage = $("stage"), overlay = $("overlay"), octx = ove
 const modeDot = $("modeDot"), modeText = $("modeText"), breathFill = $("breathFill");
 const ui = {
   sens: $("sens"), fingerSize: $("fingerSize"), palmSize: $("palmSize"),
-  ambient: $("ambient"), drips: $("drips"), breathSrc: $("breathSrc"),
+  ambient: $("ambient"), fogAmt: $("fogAmt"), drips: $("drips"), breathSrc: $("breathSrc"),
 };
 
 // =====================================================================
@@ -308,7 +309,7 @@ const FS = `#version 300 es
 precision highp float;
 uniform sampler2D uVideo, uMask, uSmear;
 uniform vec2 uRes;          // device px
-uniform float uDpr, uHasVideo, uTime, uTheme, uGlitch;
+uniform float uDpr, uHasVideo, uTime, uTheme, uGlitch, uFog;   // uFog: 0 = light mist, 1 = heavy steam
 uniform vec4 uVRect;        // video cover rect, normalized screen units
 uniform vec4 uDrips[${MAX_DRIPS}];
 uniform int uDripN;
@@ -401,8 +402,8 @@ void main(){
 
   // ---- fogged look: heavy scatter blur, lifted & desaturated, lit by its own droplets
   vec2 refr = fine.xy * fine.z * 0.0018 * thick;
-  float lod = mix(1.2, 5.4, thick);
-  vec3 blurred = blurScene(s + refr, lod, 0.006 + 0.03 * thick);
+  float lod = mix(1.0, mix(2.8, 5.4, uFog), thick);
+  vec3 blurred = blurScene(s + refr, lod, (0.004 + mix(0.012, 0.03, uFog) * thick));
   vec3 glow = blurScene(s, 6.8, 0.09);                           // light bleeding through the fog
   float lum = dot(blurred, vec3(0.299, 0.587, 0.114));
   vec3 fogged = mix(vec3(lum), blurred, 0.72);
@@ -410,9 +411,9 @@ void main(){
   float edgeDist = min(min(s.x, 1.0 - s.x) * uRes.x / uRes.y, min(s.y, 1.0 - s.y));
   float border = 1.0 - smoothstep(0.0, 0.16, edgeDist);
   vec3 milk = mix(vec3(0.84, 0.875, 0.905), vec3(0.95, 0.85, 0.92), uTheme * border);
-  float lift = 0.33 + 0.07 * (n - 0.5) + 0.05 * vign;
+  float lift = mix(0.14, 0.33, uFog) + 0.06 * (n - 0.5) + 0.05 * vign;
   fogged = fogged * (1.0 - lift) + milk * lift;
-  fogged += glow * glow * 0.32;
+  fogged += glow * glow * mix(0.18, 0.32, uFog);
   // micro-droplet sparkle and their tiny shadows
   vec3 Nf = normalize(vec3(fine.xy * 0.9, 1.0));
   fogged += pow(max(dot(Nf, L), 0.0), 30.0) * fine.z * 0.07 * (0.5 + lum);
@@ -481,7 +482,7 @@ function initGL() {
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-  for (const n of ["uVideo", "uMask", "uSmear", "uRes", "uDpr", "uHasVideo", "uTime", "uVRect", "uDrips", "uDripN", "uTheme", "uGlitch"])
+  for (const n of ["uVideo", "uMask", "uSmear", "uRes", "uDpr", "uHasVideo", "uTime", "uVRect", "uDrips", "uDripN", "uTheme", "uGlitch", "uFog"])
     U[n] = gl.getUniformLocation(prog, n);
   gl.bindVertexArray(gl.createVertexArray());
 
@@ -527,6 +528,7 @@ function render(t) {
   gl.uniform1i(U.uDripN, drips.length);
   gl.uniform1f(U.uTheme, themeAmt);
   gl.uniform1f(U.uGlitch, glitch);
+  gl.uniform1f(U.uFog, +ui.fogAmt.value);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
