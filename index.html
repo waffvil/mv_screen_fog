@@ -1222,9 +1222,8 @@ function drawFrame() {
     // centrepiece: the heart crest, with vines branching out along the top edge
     const reach = (W / 2 - m * 3) / t;
     g.save(); g.translate(W / 2, m * 0.6); centerSigil(g, t, reach); g.restore();
-    // small pieces in the bottom corners only
-    const corner = (sx, seed) => { g.save(); g.translate(sx < 0 ? W - m : m, H - m); g.scale(sx, -1); cornerSigil(g, s * 0.45, seed); g.restore(); };
-    corner(1, 4); corner(-1, 9);
+    // bottom heart with its arms (smaller, flipped); no corner pieces
+    g.save(); g.translate(W / 2, H - m * 0.6); g.scale(0.7, -0.7); centerSigil(g, t); g.restore();
     // matching side accents
     for (const left of [true, false]) {
       g.save(); g.translate(left ? m * 1.15 : W - m * 1.15, H / 2); g.scale(left ? 1 : -1, 1); sideAccent(g, t); g.restore();
