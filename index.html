@@ -1103,7 +1103,7 @@ function sprout(g, parent, u, turn, len, curl, wScale = 0.85) {
 const swell = (w0, wMax, peak = 0.3) => (u) => u < peak ? w0 + (wMax - w0) * Math.sin((u / peak) * Math.PI / 2) : wMax * Math.pow((1 - u) / (1 - peak), 1.3);
 
 // Crest: one continuous heart with wings and thorns growing out of it, pierced by a dagger.
-function centerSigil(g, t) {
+function centerSigil(g, t, reach = 0) {   // reach: how far (in t units) the vines run along the edge
   const P = (x, y) => [x * t, y * t];
   // dagger first, so the heart sits over its middle
   ribbonCubic(g, P(0, -0.08), P(0, 0.3), P(0, 0.7), P(0, 1.3), (u) => t * (u < 0.28 ? 0.006 + 0.016 * (u / 0.28) : 0.022 * Math.pow((1 - u) / 0.72, 1.1)));
@@ -1128,6 +1128,23 @@ function centerSigil(g, t) {
     sprout(g, low, 0.45, 0.6, 0.34 * t, 0.5);            // hangs off the lower wing and curls in
     sprout(g, low, 0.78, -0.55, 0.2 * t, -0.4, 0.8);
     sprout(g, tail, 0.55, 0.9, 0.22 * t, 0.6, 0.9);      // small curl under the heart
+    if (reach > 2) {
+      // main vine: grows out of the upper wing and runs along the top edge toward the corner
+      const va = up(0.72);
+      const vine = ribbonCubic(g, [va.x, va.y], P(1.9, -0.02), P(reach * 0.7, 0.2), P(reach, 0.1), swell(va.w * 0.9, 0.03 * t, 0.15));
+      // thorns and tendrils branching off it, getting smaller toward the end
+      const n = Math.max(3, Math.round((reach - 1.5) / 0.7));
+      for (let i = 0; i < n; i++) {
+        const u = 0.12 + (i / n) * 0.8, k = 1 - i / n;
+        sprout(g, vine, u, i % 2 ? 0.55 : 0.75, (0.18 + 0.22 * k) * t, i % 2 ? 0.5 : 0.65, 0.8);
+        if (i % 3 === 1) sprout(g, vine, u + 0.04, -0.5, 0.14 * k * t + 0.06 * t, -0.4, 0.7);
+      }
+      // second, thinner vine dropping off the lower wing
+      const vb = low(0.8);
+      const vine2 = ribbonCubic(g, [vb.x, vb.y], P(1.6, 0.5), P(reach * 0.45, 0.42), P(reach * 0.62, 0.22), swell(vb.w * 0.8, 0.02 * t, 0.2));
+      sprout(g, vine2, 0.35, 0.6, 0.2 * t, 0.6, 0.8);
+      sprout(g, vine2, 0.65, -0.6, 0.14 * t, -0.5, 0.8);
+    }
     g.restore();
   }
 }
@@ -1202,12 +1219,12 @@ function drawFrame() {
   g.fillStyle = vg; g.fillRect(0, 0, W, H);
 
   const drawAll = () => {
-    // each corner is its own variation (style + size)
-    const corner = (sx, sy, seed, k) => { g.save(); g.translate(sx < 0 ? W - m : m, sy < 0 ? H - m : m); g.scale(sx, sy); cornerSigil(g, s * k, seed); g.restore(); };
-    corner(1, 1, 4, 1.0); corner(-1, 1, 9, 0.9); corner(1, -1, 14, 0.95); corner(-1, -1, 7, 1.08);
-    // hearts always centred, top and bottom
-    g.save(); g.translate(W / 2, m * 0.6); centerSigil(g, t); g.restore();
-    g.save(); g.translate(W / 2, H - m * 0.6); g.scale(0.7, -0.7); centerSigil(g, t); g.restore();
+    // centrepiece: the heart crest, with vines branching out along the top edge
+    const reach = (W / 2 - m * 3) / t;
+    g.save(); g.translate(W / 2, m * 0.6); centerSigil(g, t, reach); g.restore();
+    // small pieces in the bottom corners only
+    const corner = (sx, seed) => { g.save(); g.translate(sx < 0 ? W - m : m, H - m); g.scale(sx, -1); cornerSigil(g, s * 0.45, seed); g.restore(); };
+    corner(1, 4); corner(-1, 9);
     // matching side accents
     for (const left of [true, false]) {
       g.save(); g.translate(left ? m * 1.15 : W - m * 1.15, H / 2); g.scale(left ? 1 : -1, 1); sideAccent(g, t); g.restore();
