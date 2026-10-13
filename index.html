@@ -94,6 +94,8 @@
   button.pill.on { background: rgba(159,216,255,0.32); border-color: rgba(159,216,255,0.6); }
   #breathMeter { width: 60px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.22); overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
   #breathFill { height: 100%; width: 0%; background: var(--accent); transition: width 0.08s; }
+  #revPill { display: none; color: #9fd8ff; }
+  body.reverse #revPill { display: inline-block; }
   #modeDot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888; margin-right: 6px; vertical-align: middle; }
   .hidden-ui .hud { opacity: 0; pointer-events: none; }
 
@@ -128,6 +130,7 @@
 
 <div id="status" class="hud">
   <span class="pill"><span id="modeDot"></span><span id="modeText">loading…</span></span>
+  <span class="pill" id="revPill">⇄ reversed</span>
   <span class="pill" id="micPill">breath<span id="breathMeter"><span id="breathFill"></span></span></span>
 </div>
 
@@ -136,6 +139,7 @@
   <button class="pill" id="skelBtn" title="Show tracking (H)">Tracking</button>
   <button class="pill" id="calBtn" title="Relax your mouth, then click (C)">Calibrate</button>
   <button class="pill" id="themeBtn" title="Sigil mode (T) — or hold an upside-down M">✧</button>
+  <button class="pill" id="revBtn" title="Reverse (V) — or hold a peace sign: wiping adds fog, breath clears it">⇄</button>
   <button class="pill" id="retroBtn" title="Retro Y2K (Y) — or hold an O with your hand">Y2K</button>
   <button class="pill" id="snapBtn" title="Save a photo (S)">Save</button>
   <button class="pill" id="setBtn" title="Settings">⚙</button>
@@ -160,7 +164,7 @@
 
 <div id="retro"><div class="vf tl"></div><div class="vf tr"></div><div class="vf bl"></div><div class="vf br"></div><div class="mid"></div>
   <div class="rec"><b>●</b> REC&nbsp; SP</div><div class="batt">▮▮▮▯</div><div class="stamp" id="stamp"></div></div>
-<div id="hint" class="hud">☝️ one finger draws · ✋ open palm wipes · 😗 make an O to breathe the fog back · ✧ upside-down M = sigil · 👌 hand O = retro</div>
+<div id="hint" class="hud">☝️ one finger draws · ✋ open palm wipes · 😗 make an O to breathe the fog back · ✧ upside-down M = sigil · 👌 hand O = retro · ✌️ peace = reverse</div>
 
 <div id="intro">
   <div class="intro-card">
@@ -271,7 +275,9 @@ function wipePalm(x, y, r, angle, strength = 0.5) {
 function addFog(x, y, r, amount) {
   const mx = x * MASK_SCALE, my = y * MASK_SCALE, mr = r * MASK_SCALE;
   mctx.save();
-  mctx.globalCompositeOperation = "source-over";
+  // reverse mode: breath clears the glass instead
+  mctx.globalCompositeOperation = reverseOn ? "destination-out" : "source-over";
+  if (reverseOn) amount *= 1.6;
   for (let i = 0; i < 5; i++) {
     const ox = mx + (Math.random() - 0.5) * mr * 0.45, oy = my + (Math.random() - 0.5) * mr * 0.35;
     const rr = mr * (0.55 + Math.random() * 0.5);
@@ -639,6 +645,8 @@ function classify(h, world, lm) {
   // hand "O": thumb tip meets the index tip, fingers curved round but NOT clenched into the palm (that'd be a fist)
   const pd = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y) / palmLen;
   if (pd(4, 8) < 0.42 && !e.index && pd(8, 5) > 0.35 && pd(12, 9) > 0.3) return "retro";
+  // ✌️ peace sign: index + middle up and spread apart, ring + pinky curled
+  if (e.index && e.middle && !e.ring && !e.pinky && !flipped && pd(8, 12) > 0.35) return "peace";
   if (n >= 3 && e.middle && e.ring) return "palm";
   if (e.index && !e.middle && !e.ring && !e.pinky) return "finger";   // a clean point only
   return "hover";
@@ -687,11 +695,11 @@ function processHands(result, now) {
       h.themeStart = now; h.themeFired = false;
     }
     // hold the theme gesture to toggle the cute mirror
-    if (h.mode === "theme" || h.mode === "retro") {
+    if (h.mode === "theme" || h.mode === "retro" || h.mode === "peace") {
       const c = toScreen({ x: (lm[0].x + lm[9].x) / 2, y: (lm[0].y + lm[9].y) / 2 });
       h.themeAt = c;
       h.themeProgress = Math.min(1, (now - h.themeStart) / THEME_HOLD_MS);
-      if (h.themeProgress >= 1 && !h.themeFired) { h.themeFired = true; h.mode === "retro" ? toggleRetro(c) : toggleTheme(c); }
+      if (h.themeProgress >= 1 && !h.themeFired) { h.themeFired = true; h.mode === "retro" ? toggleRetro(c) : h.mode === "peace" ? toggleReverse(c) : toggleTheme(c); }
     } else h.themeProgress = 0;
 
     let p, size;
@@ -747,7 +755,7 @@ function strokeTo(h, x, y, size, mode) {
     const pt = { x: u * u * M0.x + 2 * u * t * Q.x + t * t * M1.x, y: u * u * M0.y + 2 * u * t * Q.y + t * t * M1.y };
     stamp(pt.x, pt.y, size, mode, Math.atan2(pt.y - prev.y, pt.x - prev.x));
     if (i % smearEvery === 0 || i === n) {
-      if (d2(smearFrom, pt) > 0.5) smearStroke(h, smearFrom, pt, size, mode);
+      if (!reverseOn && d2(smearFrom, pt) > 0.5) smearStroke(h, smearFrom, pt, size, mode);
       smearFrom = pt;
     }
     prev = pt;
@@ -786,7 +794,25 @@ function smearStroke(h, a, b, size, mode) {
   sctx.restore();
 }
 
+let reverseOn = false;   // ✌️ reverse: wiping paints fog, breath clears it
+function fogStamp(x, y, size, mode, angle) {
+  const mx = x * MASK_SCALE, my = y * MASK_SCALE, mr = Math.max(1.5, size * MASK_SCALE);
+  for (const c of [mctx, sctx]) {               // add fog; also dissolve any smear under it
+    c.save();
+    c.globalCompositeOperation = c === mctx ? "source-over" : "destination-out";
+    if (mode === "palm") {
+      c.globalAlpha = 0.35; c.translate(mx, my); c.rotate(angle);
+      c.drawImage(palmBrush, -mr, -mr * 0.85, mr * 2, mr * 1.7);
+    } else {
+      const gr = c.createRadialGradient(mx, my, 0, mx, my, mr);
+      gr.addColorStop(0, "rgba(255,255,255,0.9)"); gr.addColorStop(0.6, "rgba(255,255,255,0.6)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = gr; c.fillRect(mx - mr, my - mr, mr * 2, mr * 2);
+    }
+    c.restore();
+  }
+}
 function stamp(x, y, size, mode, angle) {
+  if (reverseOn) return fogStamp(x, y, size, mode, angle);
   if (mode === "palm") { wipePalm(x, y, size, angle, 0.5); maybeSpawnDrip(x, y, size, 0.01); }
   else { wipeFinger(x, y, size, 1); maybeSpawnDrip(x, y, size, 0.005); }
 }
@@ -980,7 +1006,7 @@ const LIPS = [61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40
 function drawOverlay() {
   octx.clearRect(0, 0, W, H);
   for (const h of hands) {
-    if ((h.mode !== "theme" && h.mode !== "retro") || !h.themeAt || h.themeFired || performance.now() - h.seenAt > 120) continue;
+    if (!["theme", "retro", "peace"].includes(h.mode) || !h.themeAt || h.themeFired || performance.now() - h.seenAt > 120) continue;
     const r = 34 * DPR;
     octx.save();
     octx.shadowColor = "rgba(255,150,210,0.9)"; octx.shadowBlur = 10 * DPR;
@@ -1352,6 +1378,7 @@ function updateStatus() {
   if (pointers.size) { m = "drawing"; c = "#9fd8ff"; }
   else if (modes.includes("palm")) { m = "palm · wiping"; c = "#ffd296"; }
   else if (modes.includes("finger")) { m = "finger · drawing"; c = "#9fd8ff"; }
+  else if (modes.includes("peace")) { m = reverseOn ? "hold to un-reverse…" : "hold for reverse ⇄"; c = "#9fd8ff"; }
   else if (modes.includes("retro")) { m = retroOn ? "hold to exit retro…" : "hold for retro Y2K… 📼"; c = "#ff9a2e"; }
   else if (modes.includes("theme")) { m = themeOn ? "hold to exit sigil mode…" : "hold for sigil mode… ✧"; c = "#f3b6d8"; }
   else if (modes.length) m = "hand · not touching";
@@ -1410,6 +1437,14 @@ $("refogBtn").onclick = fogUp;
 $("calBtn").onclick = recalibrateMouth;
 $("themeBtn").onclick = () => toggleTheme();
 $("retroBtn").onclick = () => toggleRetro();
+$("revBtn").onclick = () => toggleReverse();
+function toggleReverse(at) {
+  reverseOn = !reverseOn;
+  document.body.classList.toggle("reverse", reverseOn);
+  $("revBtn").classList.toggle("on", reverseOn);
+  const c = at || { x: W / 2, y: H / 2 };
+  sparkParticles.push({ ring: true, x: c.x, y: c.y, r: 10 * DPR, life: 1 });
+}
 // old-digicam date stamp:  '26 10 13  19:42
 function updateStamp() {
   const d = new Date(), z = (n) => String(n).padStart(2, "0");
@@ -1435,6 +1470,7 @@ addEventListener("keydown", (e) => {
   if (k === "r") fogUp();
   if (k === "t") toggleTheme();
   if (k === "y") toggleRetro();
+  if (k === "v") toggleReverse();
   if (k === "c") recalibrateMouth();
   if (k === "h") $("skelBtn").click();
   if (k === "s") snapshot();
