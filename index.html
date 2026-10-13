@@ -6,7 +6,7 @@
 <title>Fogged Glass</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌫️</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=VT323&display=swap" rel="stylesheet" />
 <style>
   :root {
     --glass: rgba(255, 255, 255, 0.14);
@@ -26,6 +26,24 @@
   #stage, #overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; }
   #stage { cursor: crosshair; }
   #overlay { pointer-events: none; }
+  /* retro Y2K digicam overlay */
+  #retro { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.6s; font-family: VT323, ui-monospace, monospace; z-index: 3; }
+  body.theme-retro #retro { opacity: 1; }
+  #retro .stamp { position: absolute; right: calc(5vmin + env(safe-area-inset-right)); bottom: calc(5vmin + env(safe-area-inset-bottom)); color: #ff9a2e; font-size: clamp(22px, 4vmin, 40px); letter-spacing: 0.08em; text-shadow: 0 0 6px rgba(255,140,40,0.9), 0 0 14px rgba(255,100,20,0.5); }
+  #retro .rec { position: absolute; left: calc(5vmin + 12px); top: calc(5vmin + 44px); color: #fff; font-size: clamp(20px, 3.4vmin, 32px); text-shadow: 0 0 6px rgba(0,0,0,0.6); }
+  #retro .rec b { color: #ff3b3b; animation: blink 1s steps(1) infinite; font-weight: normal; }
+  #retro .batt { position: absolute; right: calc(5vmin + 12px); top: calc(5vmin + 44px); color: #fff; font-size: clamp(18px, 3vmin, 28px); text-shadow: 0 0 6px rgba(0,0,0,0.6); }
+  #retro .vf { position: absolute; width: 7vmin; height: 7vmin; border: 0 solid rgba(255,255,255,0.85); }
+  #retro .vf.tl { left: 3vmin; top: 3vmin; border-left-width: 2px; border-top-width: 2px; }
+  #retro .vf.tr { right: 3vmin; top: 3vmin; border-right-width: 2px; border-top-width: 2px; }
+  #retro .vf.bl { left: 3vmin; bottom: 3vmin; border-left-width: 2px; border-bottom-width: 2px; }
+  #retro .vf.br { right: 3vmin; bottom: 3vmin; border-right-width: 2px; border-bottom-width: 2px; }
+  #retro .mid { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 0.6; }
+  #retro .mid::before, #retro .mid::after { content: ""; position: absolute; background: #fff; }
+  #retro .mid::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #retro .mid::after { top: 10px; left: 0; height: 2px; width: 22px; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (max-width: 600px) { #retro .stamp { bottom: calc(70px + env(safe-area-inset-bottom)); } #retro .rec, #retro .batt { top: calc(70px + env(safe-area-inset-top)); } }
   #frame { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; pointer-events: none; opacity: 0; transition: opacity 0.9s ease; }
   body.theme-sigil #frame { opacity: 1; }
   body.theme-sigil .pill { background: rgba(18, 10, 22, 0.38); border-color: rgba(255, 255, 255, 0.32); letter-spacing: 0.04em; }
@@ -118,6 +136,7 @@
   <button class="pill" id="skelBtn" title="Show tracking (H)">Tracking</button>
   <button class="pill" id="calBtn" title="Relax your mouth, then click (C)">Calibrate</button>
   <button class="pill" id="themeBtn" title="Sigil mode (T) — or hold an upside-down M">✧</button>
+  <button class="pill" id="retroBtn" title="Retro Y2K (Y) — or hold an O with your hand">Y2K</button>
   <button class="pill" id="snapBtn" title="Save a photo (S)">Save</button>
   <button class="pill" id="setBtn" title="Settings">⚙</button>
 </div>
@@ -139,7 +158,9 @@
   <div class="row"><span>Hold <b>Space</b> = breathe</span><span><b>F</b> fullscreen</span></div>
 </div>
 
-<div id="hint" class="hud">☝️ one finger draws · ✋ open palm wipes · 😗 make an O to breathe the fog back · ✧ hold an upside-down M for sigil mode</div>
+<div id="retro"><div class="vf tl"></div><div class="vf tr"></div><div class="vf bl"></div><div class="vf br"></div><div class="mid"></div>
+  <div class="rec"><b>●</b> REC&nbsp; SP</div><div class="batt">▮▮▮▯</div><div class="stamp" id="stamp"></div></div>
+<div id="hint" class="hud">☝️ one finger draws · ✋ open palm wipes · 😗 make an O to breathe the fog back · ✧ upside-down M = sigil · 👌 hand O = retro</div>
 
 <div id="intro">
   <div class="intro-card">
@@ -309,7 +330,7 @@ const FS = `#version 300 es
 precision highp float;
 uniform sampler2D uVideo, uMask, uSmear;
 uniform vec2 uRes;          // device px
-uniform float uDpr, uHasVideo, uTime, uTheme, uGlitch, uFog;   // uFog: 0 = light mist, 1 = heavy steam
+uniform float uDpr, uHasVideo, uTime, uTheme, uGlitch, uFog, uRetro;   // uFog: 0 = light mist, 1 = heavy steam
 uniform vec4 uVRect;        // video cover rect, normalized screen units
 uniform vec4 uDrips[${MAX_DRIPS}];
 uniform int uDripN;
@@ -371,6 +392,10 @@ float maskAt(vec2 s){ return texture(uMask, s).a; }
 void main(){
   vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);   // device px, y down
   vec2 s = px / uRes;
+  if (uRetro > 0.01) {   // low-res digicam sensor: chunky pixels
+    vec2 q = uRes / (3.0 * uDpr);
+    s = mix(s, (floor(s * q) + 0.5) / q, step(0.5, uRetro));
+  }
   if (uGlitch > 0.01) {   // band displacement on toggle
     float band = floor(s.y * 28.0 + floor(uTime * 30.0) * 7.0);
     float j = hash1(vec2(band, floor(uTime * 30.0)));
@@ -421,6 +446,11 @@ void main(){
 
   // ---- wiped glass: sharp view, slightly wet, ridge of water refracts along the edge
   vec3 clear = scene(s - grad * 0.012, 0.0);
+  if (uRetro > 0.01) {   // RGB fringing on the clear glass
+    vec2 ca = (s - 0.5) * 0.012 * uRetro;
+    clear.r = scene(s - grad * 0.012 + ca, 0.0).r;
+    clear.b = scene(s - grad * 0.012 - ca, 0.0).b;
+  }
 
   float f = smoothstep(0.02, 0.95, thick);
   vec3 col = mix(clear, fogged, f);
@@ -465,6 +495,18 @@ void main(){
   graded = mix(graded * vec3(0.86, 0.82, 0.92), graded, smoothstep(0.1, 0.6, lumC));
   graded += (hash1(px + fract(uTime) * 91.7) - 0.5) * 0.035;
   col = mix(col, graded, uTheme * border);
+  // retro Y2K digicam: punchy warm colour, blooming highlights, scanlines, vignette, grain
+  if (uRetro > 0.01) {
+    float lr = dot(col, vec3(0.299, 0.587, 0.114));
+    vec3 rc = mix(vec3(lr), col, 1.35);                                  // saturation up
+    rc = (rc - 0.5) * 1.12 + 0.5;                                         // contrast up
+    rc *= vec3(1.06, 1.0, 0.9); rc += vec3(0.03, 0.012, 0.03);           // warm, slightly magenta lift
+    rc += smoothstep(0.62, 1.0, lr) * vec3(0.22, 0.16, 0.12);            // highlight bloom
+    rc *= 0.93 + 0.07 * sin(px.y / uDpr * 3.14159);                      // scanlines
+    rc *= 1.0 - 0.45 * smoothstep(0.45, 0.95, length((s - 0.5) * vec2(1.0, 1.1)) * 1.25);  // vignette
+    rc += (hash1(floor(px / (2.0 * uDpr)) + fract(uTime * 7.0) * 31.0) - 0.5) * 0.07;     // chunky grain
+    col = mix(col, clamp(rc, 0.0, 1.0), uRetro);
+  }
   outColor = vec4(col, 1.0);
 }`;
 
@@ -482,7 +524,7 @@ function initGL() {
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-  for (const n of ["uVideo", "uMask", "uSmear", "uRes", "uDpr", "uHasVideo", "uTime", "uVRect", "uDrips", "uDripN", "uTheme", "uGlitch", "uFog"])
+  for (const n of ["uVideo", "uMask", "uSmear", "uRes", "uDpr", "uHasVideo", "uTime", "uVRect", "uDrips", "uDripN", "uTheme", "uGlitch", "uFog", "uRetro"])
     U[n] = gl.getUniformLocation(prog, n);
   gl.bindVertexArray(gl.createVertexArray());
 
@@ -529,6 +571,7 @@ function render(t) {
   gl.uniform1f(U.uTheme, themeAmt);
   gl.uniform1f(U.uGlitch, glitch);
   gl.uniform1f(U.uFog, +ui.fogAmt.value);
+  gl.uniform1f(U.uRetro, retroAmt);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
@@ -593,6 +636,9 @@ function classify(h, world, lm) {
   const flipped = lm[9].y - lm[0].y > palmLen * 0.5;
   const down = (tip, mcp) => lm[tip].y > lm[mcp].y + palmLen * 0.25;
   if (flipped && e.index && e.middle && e.ring && down(8, 5) && down(12, 9) && down(16, 13)) return "theme";
+  // hand "O": thumb tip meets the index tip, fingers curved round but NOT clenched into the palm (that'd be a fist)
+  const pd = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y) / palmLen;
+  if (pd(4, 8) < 0.42 && !e.index && pd(8, 5) > 0.35 && pd(12, 9) > 0.3) return "retro";
   if (n >= 3 && e.middle && e.ring) return "palm";
   if (e.index && !e.middle && !e.ring && !e.pinky) return "finger";   // a clean point only
   return "hover";
@@ -641,11 +687,11 @@ function processHands(result, now) {
       h.themeStart = now; h.themeFired = false;
     }
     // hold the theme gesture to toggle the cute mirror
-    if (h.mode === "theme") {
+    if (h.mode === "theme" || h.mode === "retro") {
       const c = toScreen({ x: (lm[0].x + lm[9].x) / 2, y: (lm[0].y + lm[9].y) / 2 });
       h.themeAt = c;
       h.themeProgress = Math.min(1, (now - h.themeStart) / THEME_HOLD_MS);
-      if (h.themeProgress >= 1 && !h.themeFired) { h.themeFired = true; toggleTheme(c); }
+      if (h.themeProgress >= 1 && !h.themeFired) { h.themeFired = true; h.mode === "retro" ? toggleRetro(c) : toggleTheme(c); }
     } else h.themeProgress = 0;
 
     let p, size;
@@ -934,7 +980,7 @@ const LIPS = [61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40
 function drawOverlay() {
   octx.clearRect(0, 0, W, H);
   for (const h of hands) {
-    if (h.mode !== "theme" || !h.themeAt || h.themeFired || performance.now() - h.seenAt > 120) continue;
+    if ((h.mode !== "theme" && h.mode !== "retro") || !h.themeAt || h.themeFired || performance.now() - h.seenAt > 120) continue;
     const r = 34 * DPR;
     octx.save();
     octx.shadowColor = "rgba(255,150,210,0.9)"; octx.shadowBlur = 10 * DPR;
@@ -993,8 +1039,23 @@ const frameCanvas = $("frame"), fctx = frameCanvas.getContext("2d");
 let glitch = 0;   // brief glitch when sigil mode toggles
 const sparkParticles = [];
 
+let retroOn = false, retroAmt = 0;
+function toggleRetro(at) {
+  retroOn = !retroOn;
+  if (retroOn && themeOn) toggleTheme();
+  glitch = 1;
+  document.body.classList.toggle("theme-retro", retroOn);
+  if (retroOn) {
+    const c = at || { x: W / 2, y: H / 2 };
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2, sp = (3 + Math.random() * 6) * DPR;
+      sparkParticles.push({ x: c.x, y: c.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: (8 + Math.random() * 14) * DPR, life: 1, rot: 0, spin: 0.04 });
+    }
+  }
+}
 function toggleTheme(at) {
   themeOn = !themeOn;
+  if (themeOn && retroOn) toggleRetro();
   glitch = 1;
   document.body.classList.toggle("theme-sigil", themeOn);
   if (themeOn) {
@@ -1276,6 +1337,8 @@ function loop(t) {
   updateBreath();
   updateDrips();
   themeAmt += ((themeOn ? 1 : 0) - themeAmt) * 0.06;
+  retroAmt += ((retroOn ? 1 : 0) - retroAmt) * 0.08;
+  if (retroOn && frameNo % 30 === 0) updateStamp();
   glitch *= 0.9;
   render(t);
   drawOverlay();
@@ -1289,6 +1352,7 @@ function updateStatus() {
   if (pointers.size) { m = "drawing"; c = "#9fd8ff"; }
   else if (modes.includes("palm")) { m = "palm · wiping"; c = "#ffd296"; }
   else if (modes.includes("finger")) { m = "finger · drawing"; c = "#9fd8ff"; }
+  else if (modes.includes("retro")) { m = retroOn ? "hold to exit retro…" : "hold for retro Y2K… 📼"; c = "#ff9a2e"; }
   else if (modes.includes("theme")) { m = themeOn ? "hold to exit sigil mode…" : "hold for sigil mode… ✧"; c = "#f3b6d8"; }
   else if (modes.length) m = "hand · not touching";
   if (!handLandmarker && video.readyState >= 2) m = "loading hand tracking…";
@@ -1345,6 +1409,13 @@ $("startBtn").addEventListener("click", async () => {
 $("refogBtn").onclick = fogUp;
 $("calBtn").onclick = recalibrateMouth;
 $("themeBtn").onclick = () => toggleTheme();
+$("retroBtn").onclick = () => toggleRetro();
+// old-digicam date stamp:  '26 10 13  19:42
+function updateStamp() {
+  const d = new Date(), z = (n) => String(n).padStart(2, "0");
+  $("stamp").textContent = `'${z(d.getFullYear() % 100)} ${z(d.getMonth() + 1)} ${z(d.getDate())}  ${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+updateStamp();
 $("skelBtn").onclick = () => { showSkeleton = !showSkeleton; $("skelBtn").classList.toggle("on", showSkeleton); };
 $("setBtn").onclick = () => { $("settings").classList.toggle("open"); $("setBtn").classList.toggle("on"); };
 $("snapBtn").onclick = snapshot;
@@ -1363,6 +1434,7 @@ addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "r") fogUp();
   if (k === "t") toggleTheme();
+  if (k === "y") toggleRetro();
   if (k === "c") recalibrateMouth();
   if (k === "h") $("skelBtn").click();
   if (k === "s") snapshot();
